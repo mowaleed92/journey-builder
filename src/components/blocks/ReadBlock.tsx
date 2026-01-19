@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { BookOpen, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
-import { useRTL } from '../../contexts/RTLContext';
+import { useRTL, useTranslation } from '../../contexts';
 import { ArabicContent } from '../glossary';
 import type { ReadBlockContent } from '../../types/database';
 
@@ -13,6 +13,7 @@ interface ReadBlockProps {
 }
 
 export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId }: ReadBlockProps) {
+  const { t } = useTranslation();
   const { isRTL, direction, primaryLanguage } = useRTL();
   const [scrollProgress, setScrollProgress] = useState(0);
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
@@ -115,7 +116,7 @@ export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId 
         );
       } else if (line.startsWith('> ')) {
         elements.push(
-          <blockquote key={index} className="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 text-slate-700 italic">
+          <blockquote key={index} className="border-l-4 border-primary-500 pl-4 py-2 my-4 bg-primary-50 text-slate-700 italic">
             {renderInlineMarkdown(line.slice(2))}
           </blockquote>
         );
@@ -214,7 +215,7 @@ export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId 
               href={first.match![2]}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 underline"
+              className="text-primary-600 hover:text-primary-800 underline"
             >
               {first.match![1]}
             </a>
@@ -227,20 +228,20 @@ export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId 
     return parts;
   };
 
-  // Localized button text
+  // Get translation function
   const buttonText = {
-    continue: isRTL ? 'متابعة' : 'Continue',
-    complete: isRTL ? 'تم الإنتهاء' : 'Mark as Complete',
-    scroll: isRTL ? 'مرر للأسفل للمتابعة' : 'Scroll to continue',
-    minRead: isRTL ? 'دقائق للقراءة' : 'min read',
+    continue: t('blocks.read.continue'),
+    complete: t('blocks.markComplete'),
+    scroll: t('blocks.read.continue'),
+    minRead: t('track.min'),
   };
 
   return (
     <div className="flex flex-col h-full bg-white" dir={direction}>
       <div className="border-b border-slate-200 px-6 py-4">
         <div className={`flex items-center gap-3 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-blue-600" />
+          <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+            <BookOpen className="w-5 h-5 text-primary-600" />
           </div>
           <div className={isRTL ? 'text-right' : ''}>
             <h2 className="text-xl font-bold text-slate-900">{content.title}</h2>
@@ -254,7 +255,7 @@ export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId 
         </div>
         <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className={`h-full bg-blue-500 transition-all duration-300 ${isRTL ? 'ml-auto' : ''}`}
+            className={`h-full bg-primary-500 transition-all duration-300 ${isRTL ? 'ml-auto' : ''}`}
             style={{ 
               width: `${scrollProgress}%`,
               marginLeft: isRTL ? 'auto' : undefined,
@@ -281,7 +282,7 @@ export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId 
             w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all
             ${isRTL ? 'flex-row-reverse' : ''}
             ${hasScrolledToEnd || isCompleted
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+              ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }
           `}

@@ -5,6 +5,7 @@ interface AISettings {
   enabled: boolean;
   contentModel: string;
   helpModel: string;
+  imageModel: string;
   isLoading: boolean;
 }
 
@@ -17,6 +18,7 @@ export function useAIEnabled(): AISettings {
     enabled: true, // Default to true while loading
     contentModel: 'gpt-4o',
     helpModel: 'gpt-4o-mini',
+    imageModel: 'gpt-image-1.5',
     isLoading: true,
   });
 
@@ -29,7 +31,7 @@ export function useAIEnabled(): AISettings {
       const { data, error } = await supabase
         .from('system_settings')
         .select('setting_key, setting_value')
-        .in('setting_key', ['ai_enabled', 'ai_content_model', 'ai_help_model']);
+        .in('setting_key', ['ai_enabled', 'ai_content_model', 'ai_help_model', 'ai_image_model']);
 
       if (error) {
         console.error('Error loading AI settings:', error);
@@ -41,6 +43,7 @@ export function useAIEnabled(): AISettings {
         let enabled = true;
         let contentModel = 'gpt-4o';
         let helpModel = 'gpt-4o-mini';
+        let imageModel = 'gpt-image-1.5';
 
         data.forEach(setting => {
           switch (setting.setting_key) {
@@ -53,6 +56,9 @@ export function useAIEnabled(): AISettings {
             case 'ai_help_model':
               helpModel = setting.setting_value;
               break;
+            case 'ai_image_model':
+              imageModel = setting.setting_value;
+              break;
           }
         });
 
@@ -60,6 +66,7 @@ export function useAIEnabled(): AISettings {
           enabled,
           contentModel,
           helpModel,
+          imageModel,
           isLoading: false,
         });
       }

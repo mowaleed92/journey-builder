@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks';
+import { useTranslation } from '../contexts';
 import { TrackCard } from './TrackCard';
-import { JourneyRunner } from '../engine/JourneyRunner';
 import { sampleJourneyGraph } from '../data/sampleJourney';
 import { TrendingUp, Target, Sparkles, BookOpen, Settings, RefreshCw } from 'lucide-react';
 import type { Track, Module, JourneyVersion, GraphDefinition } from '../types/database';
@@ -20,24 +20,24 @@ interface TrackWithProgress extends Track {
   progress: number;
   journeyVersionId?: string;
   graphJson?: GraphDefinition;
+  trackId?: string;
+  currentModuleId?: string;
+  nextModuleIndex?: number;
 }
 
 export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: DashboardProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [tracks, setTracks] = useState<TrackWithProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [activeJourney, setActiveJourney] = useState<{
-    journeyVersionId: string;
-    graph: GraphDefinition;
-  } | null>(null);
   const [stats, setStats] = useState({
     totalCompleted: 0,
     totalInProgress: 0,
     streakDays: 0,
   });
-  const [platformName, setPlatformName] = useState('Learning Hub');
+  const [platformName, setPlatformName] = useState(t('dashboard.title'));
 
   useEffect(() => {
     loadTracks();
@@ -95,59 +95,77 @@ export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: Dashbo
     if (tracksData && tracksData.length > 0) {
       const tracksWithProgress = await Promise.all(
         tracksData.map(async (track) => {
-          const modules = track.modules || [];
-          let journeyVersionId: string | undefined;
-          let graphJson: GraphDefinition | undefined;
-
-          if (modules.length > 0) {
-            const firstModule = modules[0];
-            const publishedVersion = firstModule.journey_versions?.find(
-              (v: JourneyVersion) => v.status === 'published'
-            );
-            if (publishedVersion) {
-              journeyVersionId = publishedVersion.id;
-              graphJson = publishedVersion.graph_json as GraphDefinition;
-            }
+          const modules = (track.modules || []).sort((a, b) => a.order_index - b.order_index);
+          
+          if (modules.length === 0) {
+            return {
+              ...track,
+              modules,
+              progress: 0,
+            };
           }
 
-          let progress = 0;
-          if (journeyVersionId && graphJson) {
-            const { data: runs } = await supabase
-              .from('user_journey_runs')
-              .select('id, status')
-              .eq('user_id', userId)
-              .eq('journey_version_id', journeyVersionId)
-              .order('created_at', { ascending: false })
-              .limit(1);
+          // Check completion status for each module
+          const moduleCompletionStatus = await Promise.all(
+            modules.map(async (module) => {
+              const publishedVersion = module.journey_versions?.find(
+                (v: JourneyVersion) => v.status === 'published'
+              );
 
-            if (runs && runs.length > 0) {
-              const latestRun = runs[0];
-              if (latestRun.status === 'completed') {
-                progress = 100;
-              } else {
-                const { data: blockStates } = await supabase
-                  .from('user_block_states')
-                  .select('status')
-                  .eq('run_id', latestRun.id);
-
-                if (blockStates && graphJson.blocks) {
-                  const completedBlocks = blockStates.filter(
-                    (s) => s.status === 'completed'
-                  ).length;
-                  progress = Math.round(
-                    (completedBlocks / graphJson.blocks.length) * 100
-                  );
-                }
+              if (!publishedVersion) {
+                return { module, completed: false, inProgress: false, versionId: null };
               }
-            }
+
+              const { data: runs } = await supabase
+                .from('user_journey_runs')
+                .select('id, status')
+                .eq('user_id', userId)
+                .eq('journey_version_id', publishedVersion.id)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+              const latestRun = runs?.[0];
+              const completed = latestRun?.status === 'completed';
+              const inProgress = latestRun?.status === 'in_progress';
+
+              return {
+                module,
+                completed,
+                inProgress,
+                versionId: publishedVersion.id,
+                graphJson: publishedVersion.graph_json as GraphDefinition,
+              };
+            })
+          );
+
+          // Calculate overall track progress
+          const completedModules = moduleCompletionStatus.filter((m) => m.completed).length;
+          const totalModules = modules.length;
+          const overallProgress = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
+
+          // Find the module to start/resume:
+          // 1. First in-progress module
+          // 2. First incomplete module
+          // 3. First module (if all completed, allow review)
+          let targetModuleStatus = moduleCompletionStatus.find((m) => m.inProgress);
+          
+          if (!targetModuleStatus) {
+            targetModuleStatus = moduleCompletionStatus.find((m) => !m.completed && m.versionId);
+          }
+          
+          if (!targetModuleStatus) {
+            targetModuleStatus = moduleCompletionStatus[0];
           }
 
           return {
             ...track,
             modules,
-            progress,
-            journeyVersionId,
-            graphJson,
+            progress: overallProgress,
+            journeyVersionId: targetModuleStatus?.versionId || undefined,
+            graphJson: targetModuleStatus?.graphJson || undefined,
+            trackId: track.id,
+            currentModuleId: targetModuleStatus?.module.id,
+            nextModuleIndex: modules.findIndex(m => m.id === targetModuleStatus?.module.id),
           };
         })
       );
@@ -250,34 +268,11 @@ export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: Dashbo
   };
 
   const handleStartJourney = (track: TrackWithProgress) => {
-    if (track.journeyVersionId) {
-      // Navigate to journey URL - enables browser back button and shareable links
-      navigate(`/journey?v=${track.journeyVersionId}`);
+    if (track.journeyVersionId && track.trackId && track.currentModuleId) {
+      // Navigate to journey URL with track and module context for multi-module support
+      navigate(`/journey?v=${track.journeyVersionId}&t=${track.trackId}&m=${track.currentModuleId}`);
     }
   };
-
-  const handleJourneyComplete = () => {
-    setActiveJourney(null);
-    loadTracks();
-    loadStats();
-  };
-
-  const handleJourneyExit = () => {
-    setActiveJourney(null);
-    loadTracks();
-  };
-
-  if (activeJourney) {
-    return (
-      <JourneyRunner
-        journeyVersionId={activeJourney.journeyVersionId}
-        userId={userId}
-        graph={activeJourney.graph}
-        onComplete={handleJourneyComplete}
-        onExit={handleJourneyExit}
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -292,7 +287,7 @@ export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: Dashbo
               />
               <div>
                 <h1 className="text-xl font-bold text-slate-900">{platformName}</h1>
-                <p className="text-sm text-slate-500">Your AI-powered learning journey</p>
+                <p className="text-sm text-slate-500">{t('dashboard.subtitle')}</p>
               </div>
             </div>
 
@@ -307,9 +302,9 @@ export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: Dashbo
               <button
                 onClick={onLogout}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg"
-                aria-label="Sign out of your account"
+                aria-label={t('dashboard.signOut')}
               >
-                Sign Out
+                {t('dashboard.signOut')}
               </button>
             </nav>
           </div>
@@ -324,58 +319,58 @@ export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: Dashbo
             </div>
             <div>
               <div className="text-2xl font-bold text-slate-900">{stats.totalCompleted}</div>
-              <div className="text-sm text-slate-500">Completed</div>
+              <div className="text-sm text-slate-500">{t('dashboard.stats.completed')}</div>
             </div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-slate-200 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-primary-600" />
             </div>
             <div>
               <div className="text-2xl font-bold text-slate-900">{stats.totalInProgress}</div>
-              <div className="text-sm text-slate-500">In Progress</div>
+              <div className="text-sm text-slate-500">{t('dashboard.stats.inProgress')}</div>
             </div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-slate-200 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-amber-600" />
+            <div className="w-12 h-12 rounded-xl bg-warning/20 flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-warning" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-slate-900">{stats.streakDays} days</div>
-              <div className="text-sm text-slate-500">Learning Streak</div>
+              <div className="text-2xl font-bold text-slate-900">{stats.streakDays} {t('dashboard.stats.days')}</div>
+              <div className="text-sm text-slate-500">{t('dashboard.stats.streak')}</div>
             </div>
           </div>
         </div>
 
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Continue Learning</h2>
-          <p className="text-slate-600">Pick up where you left off or start a new track</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">{t('dashboard.continueLearning')}</h2>
+          <p className="text-slate-600">{t('dashboard.pickUpMessage')}</p>
         </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : tracks.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
               <BookOpen className="w-8 h-8 text-slate-400" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">No tracks available</h3>
-            <p className="text-slate-500 mb-6">Get started by creating your first learning track</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('dashboard.empty.title')}</h3>
+            <p className="text-slate-500 mb-6">{t('dashboard.empty.message')}</p>
             <button
               onClick={seedSampleData}
               disabled={isSeeding}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
             >
               {isSeeding ? (
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : (
                 <Sparkles className="w-5 h-5" />
               )}
-              {isSeeding ? 'Creating...' : 'Create Sample Track'}
+              {isSeeding ? t('dashboard.empty.creating') : t('dashboard.empty.createButton')}
             </button>
           </div>
         ) : (

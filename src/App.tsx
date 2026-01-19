@@ -1,10 +1,11 @@
 import { useState, useEffect, createContext, useContext, lazy, Suspense } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
 import { Loader2 } from 'lucide-react';
 import { ToastProvider, ToastContainer } from './hooks';
+import { RTLProvider, useTranslation } from './contexts';
 import type { GraphDefinition } from './types/database';
 
 // Lazy load heavy components for better initial load time
@@ -16,7 +17,7 @@ function LoadingFallback() {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-4" />
+        <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
         <p className="text-slate-400">Loading...</p>
       </div>
     </div>
@@ -55,7 +56,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 // Journey page that loads journey data from URL params
 function JourneyPage() {
   const { userId } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [journeyData, setJourneyData] = useState<{
     versionId: string;
     graph: GraphDefinition;
@@ -65,11 +68,11 @@ function JourneyPage() {
 
   useEffect(() => {
     const loadJourneyFromUrl = async () => {
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(location.search);
       const versionId = params.get('v');
       
       if (!versionId) {
-        setError('No journey version specified');
+        setError(t('journey.error.noVersion'));
         setIsLoading(false);
         return;
       }
@@ -82,7 +85,7 @@ function JourneyPage() {
           .single();
 
         if (fetchError || !data) {
-          setError('Journey not found');
+          setError(t('journey.error.notFound'));
           setIsLoading(false);
           return;
         }
@@ -92,14 +95,28 @@ function JourneyPage() {
           graph: data.graph_json as GraphDefinition,
         });
       } catch (err) {
-        setError('Failed to load journey');
+        setError(t('journey.error.failed'));
       } finally {
         setIsLoading(false);
       }
     };
 
+    // Reset states when URL changes to trigger fresh load
+    setIsLoading(true);
+    setJourneyData(null);
+    setError(null);
     loadJourneyFromUrl();
-  }, []);
+  }, [location.search, t]);
+
+  const handleModuleComplete = (nextModuleInfo?: { versionId: string; moduleTitle: string }) => {
+    if (nextModuleInfo) {
+      // Navigate to next module - JourneyRunner will fetch track/module context from DB
+      navigate(`/journey?v=${nextModuleInfo.versionId}`, { replace: true });
+    } else {
+      // No next module, return to dashboard
+      navigate('/');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -113,12 +130,12 @@ function JourneyPage() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error || 'Unable to load journey'}</p>
+          <p className="text-error mb-4">{error || t('journey.error.failed')}</p>
           <button
             onClick={() => navigate('/')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
-            Back to Dashboard
+            {t('journey.error.backToDashboard')}
           </button>
         </div>
       </div>
@@ -131,7 +148,7 @@ function JourneyPage() {
         journeyVersionId={journeyData.versionId}
         userId={userId}
         graph={journeyData.graph}
-        onComplete={() => navigate('/')}
+        onComplete={handleModuleComplete}
         onExit={() => navigate('/')}
       />
     </Suspense>
@@ -192,33 +209,28 @@ function App() {
     <ToastProvider>
       <AuthContext.Provider value={{ userId, settingsKey, refreshSettings, logout }}>
         <Routes>
-          {/* Public routes */}
+          {/* Public routes - Arabic */}
           <Route
             path="/login"
             element={
               userId ? (
                 <Navigate to="/" replace />
               ) : (
-                <Auth onAuthSuccess={handleAuthSuccess} />
+                <RTLProvider locale="ar">
+                  <Auth onAuthSuccess={handleAuthSuccess} />
+                </RTLProvider>
               )
             }
           />
 
-          {/* Protected routes */}
+          {/* Protected routes - Arabic for user */}
           <Route
             path="/"
             element={
               <ProtectedRoute>
-                <DashboardWrapper />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/admin/*"
-            element={
-              <ProtectedRoute>
-                <AdminWrapper />
+                <RTLProvider locale="ar">
+                  <DashboardWrapper />
+                </RTLProvider>
               </ProtectedRoute>
             }
           />
@@ -227,7 +239,21 @@ function App() {
             path="/journey"
             element={
               <ProtectedRoute>
-                <JourneyPage />
+                <RTLProvider locale="ar">
+                  <JourneyPage />
+                </RTLProvider>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin routes - English */}
+          <Route
+            path="/admin/*"
+            element={
+              <ProtectedRoute>
+                <RTLProvider locale="en">
+                  <AdminWrapper />
+                </RTLProvider>
               </ProtectedRoute>
             }
           />

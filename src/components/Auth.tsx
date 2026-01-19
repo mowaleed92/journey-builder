@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { useTranslation } from '../contexts';
 
 interface AuthProps {
   onAuthSuccess: (userId: string) => void;
 }
 
 export function Auth({ onAuthSuccess }: AuthProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,8 +55,8 @@ export function Auth({ onAuthSuccess }: AuthProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 -left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 -right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 -left-1/4 w-96 h-96 bg-primary-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 -right-1/4 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -64,8 +66,8 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             alt="Platform logo"
             className="max-h-16 w-auto object-contain mx-auto mb-4"
           />
-          <h1 className="text-3xl font-bold text-white mb-2">Learning Hub</h1>
-          <p className="text-slate-400">Master AI through interactive journeys</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('auth.platformTitle')}</h1>
+          <p className="text-slate-400">{t('auth.platformSubtitle')}</p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-8 border border-white/10 shadow-xl">
@@ -79,7 +81,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Sign In
+              {t('auth.signIn')}
             </button>
             <button
               type="button"
@@ -90,14 +92,14 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Sign Up
+              {t('auth.signUp')}
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Email
+                {t('auth.email')}
               </label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -105,16 +107,16 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   required
-                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Password
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -122,16 +124,16 @@ export function Auth({ onAuthSuccess }: AuthProps) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={t('auth.passwordPlaceholder')}
                   required
                   minLength={6}
-                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+              <div className="flex items-center gap-2 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -140,13 +142,13 @@ export function Auth({ onAuthSuccess }: AuthProps) {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-medium rounded-xl hover:from-blue-700 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-xl hover:from-primary-700 hover:to-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                  {mode === 'signin' ? t('auth.signIn') : t('auth.createAccount')}
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
@@ -155,7 +157,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
         </div>
 
         <p className="text-center text-slate-500 text-sm mt-6">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+          {t('auth.termsText')}
         </p>
       </div>
     </div>

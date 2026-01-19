@@ -307,7 +307,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
           <h1 className="text-2xl font-bold text-white">Track Manager</h1>
           <button
             onClick={() => setShowCreateTrack(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
             New Track
@@ -329,7 +329,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
           </div>
         ) : filteredTracks.length === 0 ? (
           <div className="text-center py-12">
@@ -338,7 +338,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
             <p className="text-slate-500 mb-4">Create your first learning track to get started</p>
             <button
               onClick={() => setShowCreateTrack(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-5 h-5" />
               Create Track
@@ -385,7 +385,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           track.level === 'beginner' ? 'bg-emerald-500/20 text-emerald-400' :
-                          track.level === 'intermediate' ? 'bg-amber-500/20 text-amber-400' :
+                          track.level === 'intermediate' ? 'bg-warning/20 text-warning' :
                           'bg-rose-500/20 text-rose-400'
                         }`}>
                           {track.level}
@@ -414,7 +414,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                           deleteTrack(track.id);
                         }}
                         disabled={deletingTrackId === track.id || isBulkDeleting}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 text-slate-400 hover:text-error hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
                       >
                         {deletingTrackId === track.id ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
@@ -447,7 +447,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                               bulkDeleteModules();
                             }}
                             disabled={isBulkDeleting}
-                            className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            className="text-xs px-2 py-1 bg-error text-white rounded hover:bg-error/90 disabled:opacity-50 transition-colors"
                           >
                             Delete Selected
                           </button>
@@ -463,7 +463,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                       <div
                         key={module.id}
                         className={`px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors border-b border-slate-700 last:border-b-0 ${
-                          selectedModuleIds.has(module.id) ? 'bg-blue-500/10' : ''
+                          selectedModuleIds.has(module.id) ? 'bg-primary-500/10' : ''
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -475,7 +475,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                               toggleModuleSelection(module.id);
                             }}
                             disabled={isBulkDeleting}
-                            className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                            className="w-4 h-4 rounded border-slate-600 text-primary-600 focus:ring-primary-500 focus:ring-offset-slate-900"
                           />
                           <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-sm font-medium text-slate-300">
                             {module.order_index + 1}
@@ -487,7 +487,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                                 <span className="text-emerald-400">Published</span>
                               )}
                               {draftVersion && !publishedVersion && (
-                                <span className="text-amber-400">Draft</span>
+                                <span className="text-warning">Draft</span>
                               )}
                               {!latestVersion && (
                                 <span className="text-slate-500">No content</span>
@@ -502,7 +502,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                               e.stopPropagation();
                               onEditJourney(module.id, latestVersion?.id);
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-lg transition-colors"
                           >
                             Edit Journey
                             <ChevronRight className="w-4 h-4" />
@@ -513,7 +513,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                               deleteModule(module.id);
                             }}
                             disabled={deletingModuleId === module.id || isBulkDeleting}
-                            className="p-1.5 text-slate-500 hover:text-red-400 rounded transition-colors disabled:opacity-50"
+                            className="p-1.5 text-slate-500 hover:text-error rounded transition-colors disabled:opacity-50"
                           >
                             {deletingModuleId === module.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -711,7 +711,7 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
           <button
             onClick={() => onCreate({ title, description, level, cover_image_url: coverImageUrl || undefined })}
             disabled={!title.trim() || isCreating}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
             {isCreating ? 'Creating...' : 'Create Track'}
@@ -770,7 +770,7 @@ function CreateModuleModal({ onClose, onCreate, isCreating }: {
           <button
             onClick={() => onCreate({ title, description })}
             disabled={!title.trim() || isCreating}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
             {isCreating ? 'Creating...' : 'Create Module'}
@@ -902,7 +902,7 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
           <button
             onClick={() => onSave({ title, description, level, cover_image_url: coverImageUrl || null })}
             disabled={!title.trim() || isSaving}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
             {isSaving ? 'Saving...' : 'Save Changes'}

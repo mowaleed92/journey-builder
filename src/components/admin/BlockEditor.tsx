@@ -99,11 +99,11 @@ export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRe
                           {(targetBlock?.content as { title?: string })?.title || 'Unknown block'}
                         </span>
                         {edge.condition && (
-                          <span className="text-xs text-amber-400 mr-2">Conditional</span>
+                          <span className="text-xs text-warning mr-2">Conditional</span>
                         )}
                         <button
                           onClick={() => onRemoveEdge(edge.to)}
-                          className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                          className="p-1 text-slate-500 hover:text-error hover:bg-error/10 rounded transition-colors"
                           title="Remove connection"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -169,7 +169,7 @@ export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRe
                         }
                       }}
                       disabled={availableTargets.length === 0}
-                      className="w-full px-3 py-2 text-sm bg-amber-600/20 text-amber-400 rounded-lg hover:bg-amber-600/30 disabled:opacity-50 transition-colors"
+                      className="w-full px-3 py-2 text-sm bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 disabled:opacity-50 transition-colors"
                     >
                       {"Add \"Fail\" connection (score < 50%)"}
                     </button>
@@ -223,7 +223,7 @@ function renderContentEditor(
     case 'video':
       return <VideoBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'image':
-      return <ImageBlockEditor content={content} updateContent={updateContent} />;
+      return <ImageBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'quiz':
       return <QuizBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'mission':
@@ -403,7 +403,7 @@ function ReadBlockEditor({
         />
       </div>
       {!aiEnabled && !aiSettingsLoading ? (
-        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+        <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-warning text-sm">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           <span>AI content generation is disabled by the administrator.</span>
         </div>
@@ -533,7 +533,7 @@ function VideoBlockEditor({
           onClick={() => setInputMode('url')}
           className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
             inputMode === 'url'
-              ? 'bg-blue-600 text-white'
+              ? 'bg-primary-600 text-white'
               : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
           }`}
         >
@@ -544,7 +544,7 @@ function VideoBlockEditor({
           onClick={() => setInputMode('upload')}
           className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
             inputMode === 'upload'
-              ? 'bg-blue-600 text-white'
+              ? 'bg-primary-600 text-white'
               : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
           }`}
         >
@@ -558,7 +558,7 @@ function VideoBlockEditor({
           }}
           className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
             inputMode === 'record'
-              ? 'bg-red-600 text-white'
+              ? 'bg-error text-white'
               : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
           }`}
         >
@@ -602,7 +602,7 @@ function VideoBlockEditor({
       </div>
 
       {!aiEnabled && !aiSettingsLoading ? (
-        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+        <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-warning text-sm">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           <span>AI script generation is disabled by the administrator.</span>
         </div>
@@ -649,9 +649,13 @@ function VideoBlockEditor({
 function ImageBlockEditor({
   content,
   updateContent,
+  aiEnabled,
+  aiSettingsLoading,
 }: {
   content: Record<string, unknown>;
   updateContent: (key: string, value: unknown) => void;
+  aiEnabled: boolean;
+  aiSettingsLoading: boolean;
 }) {
   const SAMPLE_IMAGES = [
     'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -661,6 +665,9 @@ function ImageBlockEditor({
   ];
 
   const [showGallery, setShowGallery] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [showAiInput, setShowAiInput] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -731,6 +738,107 @@ function ImageBlockEditor({
           placeholder="Describe the image for accessibility..."
         />
       </div>
+
+      {/* AI Image Generation */}
+      {!aiSettingsLoading && aiEnabled && (
+        <div className="pt-4 border-t border-slate-700">
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-sm font-medium text-slate-300">Generate with AI</label>
+            {!showAiInput && (
+              <button
+                onClick={() => setShowAiInput(true)}
+                className="text-xs text-primary-400 hover:text-primary-300"
+              >
+                Show
+              </button>
+            )}
+          </div>
+
+          {showAiInput && (
+            <div className="space-y-3">
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder={`Describe the image you want... (e.g., "A diagram showing how neural networks work" or "${content.caption || content.title || 'educational illustration'}")`}
+                rows={3}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+              />
+
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!aiPrompt.trim()) return;
+                    setIsGenerating(true);
+                    try {
+                      const response = await fetch(
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/image-generator`,
+                        {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                          },
+                          body: JSON.stringify({
+                            prompt: aiPrompt,
+                            contextTitle: content.title as string,
+                          }),
+                        }
+                      );
+                      const data = await response.json();
+                      if (data.url) {
+                        updateContent('url', data.url);
+                        setShowAiInput(false);
+                        setAiPrompt('');
+                      } else {
+                        console.error('No URL in response:', data);
+                      }
+                    } catch (err) {
+                      console.error('AI image generation failed:', err);
+                    } finally {
+                      setIsGenerating(false);
+                    }
+                  }}
+                  disabled={isGenerating || !aiPrompt.trim()}
+                  className="flex-1 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Generate Image
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAiInput(false);
+                    setAiPrompt('');
+                  }}
+                  disabled={isGenerating}
+                  className="px-3 py-2 bg-slate-700 text-white rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-500">
+                Powered by GPT-Image-1.5 • Images are generated and hosted by OpenAI
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!aiEnabled && !aiSettingsLoading && (
+        <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-warning text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>AI image generation is disabled by the administrator.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -832,7 +940,7 @@ function QuizBlockEditor({
               </div>
               <button
                 onClick={() => removeQuestion(qIndex)}
-                className="p-1 text-slate-500 hover:text-red-400"
+                className="p-1 text-slate-500 hover:text-error"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -898,7 +1006,7 @@ function QuizBlockEditor({
       </button>
 
       {!aiEnabled && !aiSettingsLoading ? (
-        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+        <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-warning text-sm">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           <span>AI question generation is disabled by the administrator.</span>
         </div>
@@ -1026,7 +1134,7 @@ function MissionBlockEditor({
                   {step.verificationMethod === 'ai_validate' && (
                     <button
                       onClick={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
-                      className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors"
+                      className="px-2 py-1 text-xs bg-primary-600/20 text-primary-400 rounded hover:bg-primary-600/30 transition-colors"
                     >
                       {expandedStep === step.id ? 'Hide Options' : 'AI Options'}
                     </button>
@@ -1061,7 +1169,7 @@ function MissionBlockEditor({
               </div>
               <button
                 onClick={() => removeStep(index)}
-                className="p-1 text-slate-500 hover:text-red-400"
+                className="p-1 text-slate-500 hover:text-error"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -1078,8 +1186,8 @@ function MissionBlockEditor({
         Add Step
       </button>
 
-      <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
-        <p className="text-xs text-blue-300">
+      <div className="p-3 bg-primary-900/20 border border-primary-700/30 rounded-lg">
+        <p className="text-xs text-primary-300">
           <strong>AI Validation:</strong> When selected, learners must provide an answer that will be evaluated by AI against your criteria. The AI will provide feedback and mark the step as complete if correct.
         </p>
       </div>
@@ -1160,7 +1268,7 @@ function FormBlockEditor({
               </label>
               <button
                 onClick={() => removeField(index)}
-                className="p-1 text-slate-500 hover:text-red-400"
+                className="p-1 text-slate-500 hover:text-error"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -1458,7 +1566,7 @@ function ExerciseBlockEditor({
               />
               <button
                 onClick={() => removeHint(index)}
-                className="p-1 text-slate-500 hover:text-red-400"
+                className="p-1 text-slate-500 hover:text-error"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -1564,7 +1672,7 @@ function ResourceBlockEditor({
               </select>
               <button
                 onClick={() => removeResource(index)}
-                className="p-1 text-slate-500 hover:text-red-400"
+                className="p-1 text-slate-500 hover:text-error"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

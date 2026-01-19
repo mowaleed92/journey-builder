@@ -140,6 +140,7 @@ export interface Block {
 export interface BlockUI {
   layout?: 'default' | 'fullscreen' | 'split';
   theme?: 'light' | 'dark';
+  position?: { x: number; y: number };
 }
 
 export type BlockContent =

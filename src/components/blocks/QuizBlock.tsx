@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HelpCircle, CheckCircle, XCircle, ChevronRight, RotateCcw, Award } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { QuizBlockContent, QuizQuestion } from '../../types/database';
 
 interface QuizBlockProps {
@@ -18,6 +19,7 @@ export interface QuizResult {
 }
 
 export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockProps) {
+  const { t } = useTranslation();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [showResult, setShowResult] = useState(false);
@@ -123,24 +125,24 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
           <div className="max-w-md w-full text-center">
             <div
               className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
-                result.passed ? 'bg-emerald-100' : 'bg-amber-100'
+                result.passed ? 'bg-success/20' : 'bg-warning/20'
               }`}
             >
               {result.passed ? (
                 <Award className="w-12 h-12 text-emerald-600" />
               ) : (
-                <HelpCircle className="w-12 h-12 text-amber-600" />
+                <HelpCircle className="w-12 h-12 text-warning" />
               )}
             </div>
 
             <h2 className="text-2xl font-bold text-slate-900 mb-2">
-              {result.passed ? 'Great job!' : 'Keep learning!'}
+              {result.passed ? t('blocks.quiz.result.passed') : t('blocks.quiz.result.failed')}
             </h2>
 
             <p className="text-slate-600 mb-6">
               {result.passed
-                ? "You've demonstrated good understanding of this material."
-                : "Don't worry, we'll help you understand the concepts better."}
+                ? t('blocks.quiz.result.passedMessage')
+                : t('blocks.quiz.result.failedMessage')}
             </p>
 
             <div className="bg-slate-50 rounded-xl p-6 mb-6">
@@ -148,18 +150,18 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
                 {result.score}%
               </div>
               <div className="text-slate-500">
-                {result.correctCount} of {result.totalCount} correct
+                {result.correctCount} {t('blocks.quiz.of')} {result.totalCount} {t('blocks.quiz.result.correct')}
               </div>
               <div className="mt-4 h-3 bg-slate-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    result.passed ? 'bg-emerald-500' : 'bg-amber-500'
+                    result.passed ? 'bg-success' : 'bg-warning'
                   }`}
                   style={{ width: `${result.score}%` }}
                 />
               </div>
               <div className="mt-2 text-sm text-slate-500">
-                Passing score: {passingScore}%
+                {t('blocks.quiz.result.yourScore')}: {passingScore}%
               </div>
             </div>
 
@@ -172,7 +174,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
                   {result.weakTopics.map((topic) => (
                     <span
                       key={topic}
-                      className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm"
+                      className="px-3 py-1 bg-warning/20 text-warning rounded-full text-sm"
                     >
                       {topic}
                     </span>
@@ -188,18 +190,18 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
                   className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
                 >
                   <RotateCcw className="w-5 h-5" />
-                  Try Again
+                  {t('blocks.quiz.retry')}
                 </button>
               )}
               <button
                 onClick={handleContinue}
                 className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
                   result.passed
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-amber-500 text-white hover:bg-amber-600'
+                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                    : 'bg-warning text-white hover:bg-warning/90'
                 }`}
               >
-                {result.passed ? 'Continue' : 'Get Help'}
+                {result.passed ? t('blocks.continue') : t('blocks.aiHelp.askForHelp')}
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
@@ -212,7 +214,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
   if (!currentQuestion) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -233,7 +235,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
             </div>
           </div>
           <div className="text-sm font-medium text-slate-500">
-            {currentQuestionIndex + 1} / {questions.length}
+            {t('blocks.quiz.question')} {currentQuestionIndex + 1} {t('blocks.quiz.of')} {questions.length}
           </div>
         </div>
 
@@ -278,7 +280,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
                     textColor = 'text-emerald-900';
                     icon = <CheckCircle className="w-6 h-6 text-emerald-600" />;
                   } else if (isSelected && !isCorrectAnswer) {
-                    bgColor = 'bg-red-50 border-red-500';
+                    bgColor = 'bg-error/10 border-error';
                     textColor = 'text-red-900';
                     icon = <XCircle className="w-6 h-6 text-red-600" />;
                   }
@@ -330,7 +332,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
               <h4
                 className={`font-medium mb-1 ${isCorrect ? 'text-emerald-800' : 'text-amber-800'}`}
               >
-                {isCorrect ? 'Correct!' : 'Not quite right'}
+                {isCorrect ? t('blocks.quiz.result.correct') : t('blocks.quiz.result.incorrect')}
               </h4>
               <p className={`text-sm ${isCorrect ? 'text-emerald-700' : 'text-amber-700'}`}>
                 {currentQuestion.explanation}
@@ -346,7 +348,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
             onClick={handleNext}
             className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
           >
-            {currentQuestionIndex < questions.length - 1 ? 'Next Question' : 'See Results'}
+            {currentQuestionIndex < questions.length - 1 ? t('blocks.quiz.next') : t('blocks.submit')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

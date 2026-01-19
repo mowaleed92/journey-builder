@@ -24,13 +24,24 @@ import {
 import { useAIEnabled, AIDisabledMessage } from '../../hooks/useAIEnabled';
 import type { GraphDefinition } from '../../types/database';
 
+interface TrackModuleContext {
+  moduleId: string;
+  title: string;
+  description: string | null;
+  orderIndex: number;
+  isCurrent: boolean;
+  graph: GraphDefinition | null;
+}
+
 interface AIContentGeneratorProps {
   onGenerate: (graph: GraphDefinition) => void;
   onClose: () => void;
   existingGraph?: GraphDefinition;
+  trackModulesContext?: TrackModuleContext[];
+  currentModuleId?: string;
 }
 
-export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AIContentGeneratorProps) {
+export function AIContentGenerator({ onGenerate, onClose, existingGraph, trackModulesContext = [], currentModuleId }: AIContentGeneratorProps) {
   const { enabled: aiEnabled, contentModel, isLoading: aiSettingsLoading } = useAIEnabled();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -53,6 +64,7 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
   const [includeCheckpoint, setIncludeCheckpoint] = useState(false);
   const [includeAnimation, setIncludeAnimation] = useState(false);
   const [enableWebResearch, setEnableWebResearch] = useState(true);
+  const [generateImages, setGenerateImages] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
   const [aiModel, setAiModel] = useState('gpt-4o');
 
@@ -100,6 +112,8 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
             existingGraph,
             enableWebResearch,
             model: aiModel,
+            trackModulesContext,
+            generateImages: generateImages && includeImage,
           }),
         }
       );
@@ -166,11 +180,33 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
             </div>
           ) : step === 1 && (
             <div className="space-y-6">
-              {existingGraph && existingGraph.blocks.length > 0 && (
-                <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                  <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+              {trackModulesContext.length > 1 && (
+                <div className="flex items-start gap-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <div className="font-medium text-blue-300 mb-1">Building Upon Existing Content</div>
+                    <div className="font-medium text-purple-300 mb-1">Track-Aware Generation</div>
+                    <div className="text-sm text-slate-400 mb-2">
+                      AI will reference FULL content from {trackModulesContext.filter(m => !m.isCurrent).length} other module{trackModulesContext.filter(m => !m.isCurrent).length !== 1 ? 's' : ''} in this track to ensure progressive learning.
+                    </div>
+                    <div className="space-y-1">
+                      {trackModulesContext.map((module) => (
+                        <div key={module.moduleId} className={`text-xs flex items-center gap-2 ${module.isCurrent ? 'text-purple-300 font-medium' : 'text-slate-500'}`}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                          Module {module.orderIndex + 1}: {module.title}
+                          {module.graph && ` (${module.graph.blocks?.length || 0} blocks)`}
+                          {module.isCurrent && ' (Current)'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {existingGraph && existingGraph.blocks.length > 0 && (
+                <div className="flex items-start gap-3 p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                  <AlertCircle className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="font-medium text-primary-300 mb-1">Building Upon Existing Content</div>
                     <div className="text-sm text-slate-400">
                       AI will see your {existingGraph.blocks.length} existing blocks and generate content that complements what you already have.
                     </div>
@@ -391,7 +427,7 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                       onChange={(e) => setIncludeForm(e.target.checked)}
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
-                    <FileText className="w-5 h-5 text-amber-400" />
+                    <FileText className="w-5 h-5 text-warning" />
                     <div className="flex-1">
                       <div className="text-white font-medium">Data Collection Forms</div>
                       <div className="text-xs text-slate-500">Gather learner input and surveys</div>
@@ -413,7 +449,7 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                       onChange={(e) => setIncludeAIHelp(e.target.checked)}
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
-                    <Bot className="w-5 h-5 text-blue-400" />
+                    <Bot className="w-5 h-5 text-primary-400" />
                     <div className="flex-1">
                       <div className="text-white font-medium">AI Help / Remediation</div>
                       <div className="text-xs text-slate-500">Personalized AI tutoring when struggling</div>
@@ -427,7 +463,7 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                       onChange={(e) => setIncludeCheckpoint(e.target.checked)}
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
-                    <Flag className="w-5 h-5 text-green-400" />
+                    <Flag className="w-5 h-5 text-accent" />
                     <div className="flex-1">
                       <div className="text-white font-medium">Progress Checkpoints</div>
                       <div className="text-xs text-slate-500">Validate understanding before continuing</div>
@@ -452,24 +488,45 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-3">
-                  AI Research
+                  AI Research & Generation
                 </label>
-                <label className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-xl cursor-pointer hover:border-blue-500/40 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={enableWebResearch}
-                    onChange={(e) => setEnableWebResearch(e.target.checked)}
-                    className="w-5 h-5 rounded border-slate-600 text-blue-500 focus:ring-blue-500"
-                  />
-                  <Globe className="w-5 h-5 text-blue-400" />
-                  <div className="flex-1">
-                    <div className="text-white font-medium">Web Research</div>
-                    <div className="text-xs text-slate-400">
-                      AI will search the web for the latest information on this topic to ensure accurate, up-to-date content
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-4 bg-gradient-to-r from-primary-500/10 to-accent/10 border border-primary-500/20 rounded-xl cursor-pointer hover:border-primary-500/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={enableWebResearch}
+                      onChange={(e) => setEnableWebResearch(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-blue-500 focus:ring-blue-500"
+                    />
+                    <Globe className="w-5 h-5 text-blue-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Web Research</div>
+                      <div className="text-xs text-slate-400">
+                        AI will search the web for the latest information on this topic to ensure accurate, up-to-date content
+                      </div>
                     </div>
-                  </div>
-                  <Search className="w-4 h-4 text-blue-400/50" />
-                </label>
+                    <Search className="w-4 h-4 text-blue-400/50" />
+                  </label>
+
+                  {includeImage && (
+                    <label className="flex items-center gap-3 p-4 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-xl cursor-pointer hover:border-emerald-500/40 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={generateImages}
+                        onChange={(e) => setGenerateImages(e.target.checked)}
+                        className="w-5 h-5 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500"
+                      />
+                      <Image className="w-5 h-5 text-emerald-400" />
+                      <div className="flex-1">
+                        <div className="text-white font-medium">Generate AI Images</div>
+                        <div className="text-xs text-slate-400">
+                          Automatically generate educational images/diagrams for image blocks using GPT-Image-1.5
+                        </div>
+                      </div>
+                      <Sparkles className="w-4 h-4 text-emerald-400/50" />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {error && (

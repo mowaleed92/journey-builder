@@ -115,8 +115,8 @@ export function ArabicContent({ children, trackId, moduleId, className = '' }: A
   }, [children, trackId, moduleId]);
 
   return (
-    <div className={`arabic-content ${className}`}>
+    <span className={`arabic-content ${className}`}>
       {processedContent}
-    </div>
+    </span>
   );
 }

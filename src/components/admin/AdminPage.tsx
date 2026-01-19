@@ -81,7 +81,7 @@ export function AdminPage({ onExit, onSettingsChanged }: AdminPageProps) {
               <p className="text-slate-500 mb-4">Select a module from Tracks to edit its journey</p>
               <button
                 onClick={() => setActiveTab('tracks')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
               >
                 Go to Tracks
               </button>
@@ -175,10 +175,10 @@ function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
   };
 
   const statsDisplay = [
-    { label: 'Total Tracks', value: isLoading ? '...' : String(stats.totalTracks), icon: BookOpen, color: 'bg-blue-500' },
+    { label: 'Total Tracks', value: isLoading ? '...' : String(stats.totalTracks), icon: BookOpen, color: 'bg-primary-500' },
     { label: 'Active Learners', value: isLoading ? '...' : String(stats.activeLearners), icon: Users, color: 'bg-emerald-500' },
     { label: 'Avg. Completion', value: isLoading ? '...' : `${stats.avgCompletion}%`, icon: TrendingUp, color: 'bg-purple-500' },
-    { label: 'Total Hours', value: isLoading ? '...' : String(stats.totalHours), icon: Clock, color: 'bg-amber-500' },
+    { label: 'Total Hours', value: isLoading ? '...' : String(stats.totalHours), icon: Clock, color: 'bg-warning' },
   ];
 
   return (
@@ -219,7 +219,7 @@ function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
                 onClick={() => onNavigate('tracks')}
                 className="w-full flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left"
               >
-                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
                   <BookOpen className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -293,6 +293,7 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
   // AI settings state
   const [contentModel, setContentModel] = useState('gpt-4o');
   const [helpModel, setHelpModel] = useState('gpt-4o-mini');
+  const [imageModel, setImageModel] = useState('gpt-image-1.5');
   const [aiEnabled, setAiEnabled] = useState(true);
   
   // UI state
@@ -313,7 +314,8 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
         .select('setting_key, setting_value')
         .in('setting_key', [
           'ai_content_model', 
-          'ai_help_model', 
+          'ai_help_model',
+          'ai_image_model',
           'platform_name', 
           'default_language',
           'ai_enabled'
@@ -329,6 +331,9 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
               break;
             case 'ai_help_model':
               setHelpModel(setting.setting_value);
+              break;
+            case 'ai_image_model':
+              setImageModel(setting.setting_value);
               break;
             case 'platform_name':
               setPlatformName(setting.setting_value);
@@ -360,6 +365,7 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
       const updates = [
         { setting_key: 'ai_content_model', setting_value: contentModel },
         { setting_key: 'ai_help_model', setting_value: helpModel },
+        { setting_key: 'ai_image_model', setting_value: imageModel },
         { setting_key: 'platform_name', setting_value: platformName },
         { setting_key: 'default_language', setting_value: language },
         { setting_key: 'ai_enabled', setting_value: String(aiEnabled) }
@@ -404,6 +410,7 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
     const descriptions: Record<string, string> = {
       'ai_content_model': 'AI model used for content generation in AI Studio',
       'ai_help_model': 'AI model used for student help and assistance',
+      'ai_image_model': 'AI model used for generating educational images and diagrams',
       'platform_name': 'Platform display name',
       'default_language': 'Default content language',
       'ai_enabled': 'Whether AI content generation is enabled'
@@ -492,6 +499,22 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
                 <option value="gpt-5.2">GPT-5.2 (Latest)</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Image Generation Model
+              </label>
+              <div className="text-xs text-slate-500 mb-2">Used for generating educational images and diagrams</div>
+              <select
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="gpt-image-1.5">GPT Image 1.5 (Latest)</option>
+                <option value="gpt-image-1">GPT Image 1</option>
+                <option value="dall-e-3">DALL-E 3 (High Quality)</option>
+                <option value="dall-e-2">DALL-E 2 (Faster)</option>
+              </select>
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-slate-300">Enable AI Content Generation</div>
@@ -504,14 +527,14 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
                   onChange={(e) => setAiEnabled(e.target.checked)}
                   className="sr-only peer" 
                 />
-                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
             </div>
           </div>
         </div>
 
         {message && (
-          <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+          <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-success/10 text-success border border-success/20' : 'bg-error/10 text-error border border-error/20'}`}>
             {message.text}
           </div>
         )}
@@ -519,7 +542,7 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
         <button
           onClick={saveSettings}
           disabled={saving}
-          className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Saving...' : 'Save Settings'}
         </button>

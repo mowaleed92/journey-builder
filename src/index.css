@@ -4,11 +4,22 @@
 
 @layer base {
   :root {
-    --font-arabic: 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, sans-serif;
-    --font-english: 'Inter', system-ui, sans-serif;
+    --font-arabic: 'Tajawal', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, sans-serif;
+    --font-english: 'Poppins', 'Inter', system-ui, sans-serif;
+    
+    /* Brand color variables for custom CSS if needed */
+    --color-primary: #6366EF;
+    --color-accent: #22C55E;
+    --color-success: #10B981;
+    --color-warning: #F59E0B;
+    --color-error: #EF4444;
   }
 
   html {
+    font-family: var(--font-arabic);
+  }
+
+  html[lang="en"] {
     font-family: var(--font-english);
   }
 
@@ -20,12 +31,25 @@
     text-align: right;
   }
 
+  html[dir="ltr"] {
+    font-family: var(--font-english);
+  }
+
   .font-arabic {
     font-family: var(--font-arabic);
+    font-weight: 400;
+    line-height: 1.8;
   }
 
   .font-english {
     font-family: var(--font-english);
+  }
+
+  /* Better Arabic font rendering */
+  [lang="ar"], [dir="rtl"] {
+    font-family: var(--font-arabic);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -209,6 +233,134 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+}
+
+/* React Flow custom styles for dark theme */
+.react-flow {
+  background-color: #0f172a; /* slate-900 */
+}
+
+.react-flow__controls {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.react-flow__controls-button {
+  background-color: #1e293b;
+  border-bottom: 1px solid #334155;
+  fill: #94a3b8;
+}
+
+.react-flow__controls-button:hover {
+  background-color: #334155;
+  fill: #f8fafc;
+}
+
+.react-flow__controls-button:first-child {
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.react-flow__controls-button:last-child {
+  border-radius: 0 0 0.5rem 0.5rem;
+  border-bottom: none;
+}
+
+.react-flow__minimap {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #818cf8;
+  stroke-width: 3;
+}
+
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #475569;
+  border: 2px solid #64748b;
+  transition: all 0.2s;
+}
+
+.react-flow__handle:hover {
+  background-color: #6366f1;
+  border-color: #818cf8;
+  transform: scale(1.2);
+}
+
+.react-flow__handle.connecting {
+  background-color: #6366f1;
+  border-color: #818cf8;
+}
+
+/* Quiz block pass/fail handles */
+.react-flow__handle[data-handleid="pass"] {
+  background-color: #10b981;
+  border-color: #34d399;
+}
+
+.react-flow__handle[data-handleid="pass"]:hover {
+  background-color: #059669;
+  border-color: #10b981;
+  transform: scale(1.2);
+}
+
+.react-flow__handle[data-handleid="fail"] {
+  background-color: #ef4444;
+  border-color: #f87171;
+}
+
+.react-flow__handle[data-handleid="fail"]:hover {
+  background-color: #dc2626;
+  border-color: #ef4444;
+  transform: scale(1.2);
+}
+
+/* Edge label styling */
+.react-flow__edge-textbg {
+  fill: #1e293b;
+  fill-opacity: 0.95;
+}
+
+.react-flow__edge-text {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.react-flow__connection-line {
+  stroke: #6366f1;
+  stroke-width: 2;
+}
+
+.react-flow__node.selected {
+  outline: none;
+}
+
+.react-flow__node:focus {
+  outline: none;
+}
+
+.react-flow__nodesselection-rect {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed #6366f1;
+}
+
+.react-flow__selection {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed #6366f1;
 }
 
 @layer utilities {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Target, ExternalLink, CheckCircle, Circle, ChevronRight, Upload, Loader2, XCircle, RotateCcw, Send } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { MissionBlockContent, MissionStep } from '../../types/database';
 
 interface MissionBlockProps {
@@ -28,6 +29,7 @@ interface ValidationResult {
 }
 
 export function MissionBlock({ content, onComplete, previousOutput }: MissionBlockProps) {
+  const { t } = useTranslation();
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(
     new Set(previousOutput?.completedSteps || [])
   );
@@ -175,7 +177,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                 <button
                   onClick={() => handleAIValidation(step)}
                   disabled={isValidating || !stepInputs[step.id]?.trim()}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
                 >
                   {isValidating ? (
                     <>
@@ -198,20 +200,20 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                 className={`p-4 rounded-lg ${
                   result.correct
                     ? 'bg-emerald-50 border border-emerald-200'
-                    : 'bg-red-50 border border-red-200'
+                    : 'bg-error/10 border border-error/20'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   {result.correct ? (
                     <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                   ) : (
-                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <XCircle className="w-5 h-5 text-error flex-shrink-0 mt-0.5" />
                   )}
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
                       <span
                         className={`font-medium ${
-                          result.correct ? 'text-emerald-800' : 'text-red-800'
+                          result.correct ? 'text-success' : 'text-error'
                         }`}
                       >
                         {result.correct ? 'Correct!' : 'Not quite right'}
@@ -220,7 +222,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                         className={`text-sm px-2 py-0.5 rounded ${
                           result.correct
                             ? 'bg-emerald-200 text-emerald-800'
-                            : 'bg-red-200 text-red-800'
+                            : 'bg-error/20 text-error'
                         }`}
                       >
                         Score: {result.score}%
@@ -228,7 +230,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                     </div>
                     <p
                       className={`text-sm ${
-                        result.correct ? 'text-emerald-700' : 'text-red-700'
+                        result.correct ? 'text-success' : 'text-error'
                       }`}
                     >
                       {result.feedback}
@@ -237,7 +239,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                     {!result.correct && (
                       <button
                         onClick={() => handleRetry(step.id)}
-                        className="mt-3 flex items-center gap-1 text-sm text-red-600 hover:text-red-800 font-medium"
+                        className="mt-3 flex items-center gap-1 text-sm text-error hover:text-error/80 font-medium"
                       >
                         <RotateCcw className="w-4 h-4" />
                         Try Again
@@ -327,16 +329,16 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
               href={content.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6 hover:bg-blue-100 transition-colors group"
+              className="flex items-center gap-3 p-4 bg-primary-50 border border-primary-200 rounded-xl mb-6 hover:bg-primary-100 transition-colors group"
             >
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <ExternalLink className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                <ExternalLink className="w-5 h-5 text-primary-600" />
               </div>
               <div className="flex-1">
-                <div className="font-medium text-blue-900">Open external resource</div>
-                <div className="text-sm text-blue-600 truncate">{content.externalUrl}</div>
+                <div className="font-medium text-primary-900">Open external resource</div>
+                <div className="text-sm text-primary-600 truncate">{content.externalUrl}</div>
               </div>
-              <ChevronRight className="w-5 h-5 text-blue-400 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-5 h-5 text-primary-400 group-hover:translate-x-1 transition-transform" />
             </a>
           )}
 
@@ -382,7 +384,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                           Step {index + 1}
                         </span>
                         {step.verificationMethod === 'ai_validate' && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                          <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
                             AI Validated
                           </span>
                         )}
@@ -431,7 +433,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
           disabled={!allStepsCompleted}
           className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
             allStepsCompleted
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              ? 'bg-primary-600 text-white hover:bg-primary-700'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
         >

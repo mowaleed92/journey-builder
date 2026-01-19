@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, ChevronRight, Video } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { VideoBlockContent } from '../../types/database';
 
 interface VideoBlockProps {
@@ -9,16 +10,33 @@ interface VideoBlockProps {
 }
 
 export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps) {
+  const { t } = useTranslation();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasWatchedEnough, setHasWatchedEnough] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
   const isYouTube = content.url.includes('youtube.com') || content.url.includes('youtu.be');
   const isVimeo = content.url.includes('vimeo.com');
+
+  const getVideoMimeType = (url: string): string => {
+    const extension = url.split('.').pop()?.toLowerCase().split('?')[0];
+    const mimeTypes: Record<string, string> = {
+      'mp4': 'video/mp4',
+      'webm': 'video/webm',
+      'ogg': 'video/ogg',
+      'ogv': 'video/ogg',
+      'mov': 'video/quicktime',
+      'm4v': 'video/mp4',
+      'avi': 'video/x-msvideo',
+      'wmv': 'video/x-ms-wmv',
+    };
+    return mimeTypes[extension || ''] || 'video/mp4';
+  };
 
   const getYouTubeId = (url: string) => {
     const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/);
@@ -49,16 +67,23 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
         setHasWatchedEnough(true);
       };
 
+      const handleError = () => {
+        console.error('Video loading error:', video.error);
+        setVideoError(true);
+      };
+
       video.addEventListener('timeupdate', handleTimeUpdate);
       video.addEventListener('play', handlePlay);
       video.addEventListener('pause', handlePause);
       video.addEventListener('ended', handleEnded);
+      video.addEventListener('error', handleError);
 
       return () => {
         video.removeEventListener('timeupdate', handleTimeUpdate);
         video.removeEventListener('play', handlePlay);
         video.removeEventListener('pause', handlePause);
         video.removeEventListener('ended', handleEnded);
+        video.removeEventListener('error', handleError);
       };
     }
   }, []);
@@ -125,12 +150,35 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
               onLoad={() => setHasWatchedEnough(true)}
             />
           ) : (
-            <video
-              ref={videoRef}
-              className="w-full h-full object-contain"
-              src={content.url}
-              playsInline
-            />
+            <>
+              <video
+                ref={videoRef}
+                className="w-full h-full object-contain"
+                playsInline
+              >
+                <source src={content.url} type={getVideoMimeType(content.url)} />
+                Your browser does not support the video tag.
+              </video>
+              {videoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
+                  <div className="text-center px-6">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-error/20 flex items-center justify-center">
+                      <Video className="w-8 h-8 text-error" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Video Unavailable</h3>
+                    <p className="text-slate-300 text-sm mb-4">
+                      Unable to load this video. The file may be in an unsupported format or the URL may be incorrect.
+                    </p>
+                    <button
+                      onClick={() => setHasWatchedEnough(true)}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      Continue Anyway
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {!isYouTube && !isVimeo && !isPlaying && (
@@ -153,7 +201,7 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
               onClick={handleProgressClick}
             >
               <div
-                className="h-full bg-blue-500 rounded-full transition-all"
+                className="h-full bg-primary-500 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -202,8 +250,8 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
       <div className="bg-slate-800 border-t border-slate-700">
         <div className="px-6 py-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-              <Video className="w-5 h-5 text-blue-400" />
+            <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
+              <Video className="w-5 h-5 text-primary-400" />
             </div>
             <h2 className="text-xl font-bold text-white">{content.title}</h2>
           </div>
@@ -211,7 +259,7 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
           {content.transcript && (
             <button
               onClick={() => setShowTranscript(!showTranscript)}
-              className="text-sm text-blue-400 hover:text-blue-300 mt-2"
+              className="text-sm text-primary-400 hover:text-primary-300 mt-2"
             >
               {showTranscript ? 'Hide transcript' : 'Show transcript'}
             </button>
@@ -233,12 +281,12 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
             className={`
               w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all
               ${hasWatchedEnough || isCompleted
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-primary-600 text-white hover:bg-primary-700'
                 : 'bg-slate-700 text-slate-400 cursor-not-allowed'
               }
             `}
           >
-            {isCompleted ? 'Continue' : hasWatchedEnough ? 'Mark as Complete' : 'Watch video to continue'}
+            {isCompleted ? t('blocks.continue') : hasWatchedEnough ? t('blocks.markComplete') : t('blocks.video.loading')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

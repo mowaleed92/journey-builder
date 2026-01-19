@@ -1,1 +1,1 @@
-export { RTLProvider, useRTL, rtlClass } from './RTLContext';
+export { RTLProvider, useRTL, useTranslation, rtlClass } from './RTLContext';

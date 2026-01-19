@@ -1,4 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  Connection,
+  Node,
+  Edge as ReactFlowEdge,
+  ReactFlowProvider,
+  useReactFlow,
+  MarkerType,
+  type NodeTypes,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { supabase } from '../../lib/supabase';
 import {
   Save,
@@ -16,10 +32,6 @@ import {
   Bot,
   Flag,
   Clapperboard,
-  ArrowRight,
-  Settings2,
-  Link2,
-  Unlink,
   Image,
   Check,
   AlertCircle,
@@ -27,11 +39,22 @@ import {
   Code,
   Dumbbell,
   FolderOpen,
+  GripVertical,
 } from 'lucide-react';
 import { BlockEditor } from './BlockEditor';
 import { AIContentGenerator } from './AIContentGenerator';
-import { BulkActionBar } from './BulkActionBar';
-import type { Block, Edge, GraphDefinition, BlockType } from '../../types/database';
+import BlockNode, { type BlockNodeData } from './BlockNode';
+import type { Block, Edge, GraphDefinition, BlockType, ConditionGroup, Condition } from '../../types/database';
+
+// Helper function to detect pass/fail edge type from condition
+function getEdgeType(condition?: ConditionGroup): 'pass' | 'fail' | 'normal' {
+  if (!condition?.all?.[0]) return 'normal';
+  const cond = condition.all[0] as Condition;
+  if (cond.fact === 'quiz.scorePercent') {
+    return cond.op === 'gte' || cond.op === 'gt' ? 'pass' : 'fail';
+  }
+  return 'normal';
+}
 
 interface JourneyBuilderProps {
   moduleId: string;
@@ -39,15 +62,24 @@ interface JourneyBuilderProps {
   onBack: () => void;
 }
 
+interface TrackModuleContext {
+  moduleId: string;
+  title: string;
+  description: string | null;
+  orderIndex: number;
+  isCurrent: boolean;
+  graph: GraphDefinition | null;
+}
+
 const BLOCK_TYPES: { type: BlockType; label: string; icon: React.ElementType; color: string }[] = [
-  { type: 'read', label: 'Read', icon: BookOpen, color: 'bg-blue-500' },
+  { type: 'read', label: 'Read', icon: BookOpen, color: 'bg-primary-500' },
   { type: 'video', label: 'Video', icon: Video, color: 'bg-rose-500' },
   { type: 'image', label: 'Image', icon: Image, color: 'bg-emerald-500' },
   { type: 'quiz', label: 'Quiz', icon: HelpCircle, color: 'bg-purple-500' },
   { type: 'mission', label: 'Mission', icon: Target, color: 'bg-orange-500' },
   { type: 'form', label: 'Form', icon: FileText, color: 'bg-teal-500' },
   { type: 'ai_help', label: 'AI Help', icon: Bot, color: 'bg-cyan-500' },
-  { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-amber-500' },
+  { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-yellow-500' },
   { type: 'animation', label: 'Animation', icon: Clapperboard, color: 'bg-pink-500' },
   { type: 'code', label: 'Code', icon: Code, color: 'bg-slate-600' },
   { type: 'exercise', label: 'Exercise', icon: Dumbbell, color: 'bg-violet-500' },
@@ -59,8 +91,27 @@ interface Toast {
   message: string;
 }
 
-export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBuilderProps) {
+// Custom node types for React Flow
+const nodeTypes: NodeTypes = {
+  blockNode: BlockNode as any,
+};
+
+// Default edge options for consistent styling
+const defaultEdgeOptions = {
+  type: 'smoothstep',
+  animated: true,
+  style: { stroke: '#6366f1', strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
+};
+
+function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuilderProps) {
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  
   const [graph, setGraph] = useState<GraphDefinition>({ startBlockId: '', blocks: [], edges: [] });
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<BlockNodeData>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<ReactFlowEdge>([]);
+  
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -73,6 +124,89 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
   const [toast, setToast] = useState<Toast | null>(null);
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [trackModulesContext, setTrackModulesContext] = useState<TrackModuleContext[]>([]);
+
+  // Convert graph blocks to React Flow nodes
+  const blocksToNodes = useCallback((blocks: Block[], startBlockId: string): Node<BlockNodeData>[] => {
+    return blocks.map((block, index) => {
+      // Auto-layout if no position stored
+      const position = block.ui?.position || {
+        x: 400,
+        y: 100 + index * 200,
+      };
+
+      // Check for pass/fail edges (for quiz blocks)
+      const blockEdges = graph.edges.filter(e => e.from === block.id);
+      const hasPassEdge = blockEdges.some(e => getEdgeType(e.condition) === 'pass');
+      const hasFailEdge = blockEdges.some(e => getEdgeType(e.condition) === 'fail');
+
+      return {
+        id: block.id,
+        type: 'blockNode',
+        position,
+        data: {
+          block,
+          isStart: startBlockId === block.id,
+          isSelected: selectedBlockId === block.id,
+          isMultiSelected: selectedBlockIds.has(block.id),
+          isConnectionTarget: connectionMode !== null && connectionMode.fromBlockId !== block.id,
+          outgoingEdgesCount: blockEdges.length,
+          hasPassEdge,
+          hasFailEdge,
+          onEdit: () => {
+            setSelectedBlockId(block.id);
+            setShowBlockEditor(true);
+          },
+          onDelete: () => deleteBlock(block.id),
+          onStartConnection: () => setConnectionMode({ fromBlockId: block.id }),
+        },
+      };
+    });
+  }, [selectedBlockId, selectedBlockIds, connectionMode, graph.edges]);
+
+  // Convert graph edges to React Flow edges
+  const graphEdgesToFlowEdges = useCallback((graphEdges: Edge[]): ReactFlowEdge[] => {
+    const edgeColors = {
+      pass: '#10b981',   // emerald-500
+      fail: '#ef4444',   // red-500
+      normal: '#6366f1', // indigo-500
+    };
+    const edgeLabels = {
+      pass: 'Pass',
+      fail: 'Fail',
+      normal: undefined,
+    };
+
+    return graphEdges.map((edge, index) => {
+      const edgeType = getEdgeType(edge.condition);
+      const color = edgeColors[edgeType];
+      const label = edgeLabels[edgeType];
+
+      return {
+        id: edge.id || `edge-${edge.from}-${edge.to}-${index}`,
+        source: edge.from,
+        target: edge.to,
+        sourceHandle: edgeType !== 'normal' ? edgeType : undefined,
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: color, strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
+        label,
+        labelStyle: { fill: color, fontWeight: 600, fontSize: 12 },
+        labelBgStyle: { fill: '#1e293b', fillOpacity: 0.9 },
+        labelBgPadding: [4, 8] as [number, number],
+        labelBgBorderRadius: 4,
+      };
+    });
+  }, []);
+
+  // Sync graph state with React Flow nodes/edges
+  useEffect(() => {
+    const newNodes = blocksToNodes(graph.blocks, graph.startBlockId);
+    const newEdges = graphEdgesToFlowEdges(graph.edges);
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [graph, blocksToNodes, graphEdgesToFlowEdges, setNodes, setEdges]);
 
   useEffect(() => {
     loadJourney();
@@ -92,12 +226,42 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
   const loadJourney = async () => {
     const { data: module } = await supabase
       .from('modules')
-      .select('title')
+      .select('title, track_id')
       .eq('id', moduleId)
       .single();
 
     if (module) {
       setModuleName(module.title);
+
+      if (module.track_id) {
+        const { data: siblingModules } = await supabase
+          .from('modules')
+          .select(`
+            id,
+            title,
+            description,
+            order_index,
+            journey_versions (
+              id,
+              graph_json,
+              status
+            )
+          `)
+          .eq('track_id', module.track_id)
+          .order('order_index');
+
+        if (siblingModules && siblingModules.length > 0) {
+          const context: TrackModuleContext[] = siblingModules.map((m: any) => ({
+            moduleId: m.id,
+            title: m.title,
+            description: m.description,
+            orderIndex: m.order_index,
+            isCurrent: m.id === moduleId,
+            graph: m.journey_versions?.[0]?.graph_json as GraphDefinition || null,
+          }));
+          setTrackModulesContext(context);
+        }
+      }
     }
 
     if (journeyVersionId) {
@@ -108,7 +272,22 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
         .single();
 
       if (version?.graph_json) {
-        setGraph(version.graph_json as GraphDefinition);
+        const loadedGraph = version.graph_json as GraphDefinition;
+        // Auto-layout blocks that don't have positions
+        const blocksWithPositions = loadedGraph.blocks.map((block, index) => {
+          if (!block.ui?.position) {
+            return {
+              ...block,
+              ui: {
+                ...block.ui,
+                position: { x: 400, y: 100 + index * 200 },
+              },
+            };
+          }
+          return block;
+        });
+        setGraph({ ...loadedGraph, blocks: blocksWithPositions });
+        setTimeout(() => fitView({ padding: 0.2 }), 100);
       }
     }
   };
@@ -117,11 +296,28 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setIsSaving(true);
     let savedVersionId = versionId;
 
+    // Sync node positions back to graph before saving
+    const blocksWithPositions = graph.blocks.map(block => {
+      const node = nodes.find(n => n.id === block.id);
+      if (node) {
+        return {
+          ...block,
+          ui: {
+            ...block.ui,
+            position: node.position,
+          },
+        };
+      }
+      return block;
+    });
+
+    const graphToSave = { ...graph, blocks: blocksWithPositions };
+
     try {
       if (versionId) {
         const { error } = await supabase
           .from('journey_versions')
-          .update({ graph_json: graph })
+          .update({ graph_json: graphToSave })
           .eq('id', versionId);
 
         if (error) throw error;
@@ -132,7 +328,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
             module_id: moduleId,
             version: 1,
             status: 'draft',
-            graph_json: graph,
+            graph_json: graphToSave,
           })
           .select()
           .single();
@@ -145,6 +341,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
         }
       }
 
+      setGraph(graphToSave);
       setIsDirty(false);
       showToast('success', 'Journey saved successfully');
       return savedVersionId;
@@ -208,17 +405,33 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     }
   };
 
-  const addBlock = useCallback((type: BlockType) => {
+  const addBlock = useCallback((type: BlockType, position?: { x: number; y: number }) => {
     const id = `block_${Date.now()}`;
+    
+    // Calculate position: use provided position or auto-calculate
+    let blockPosition = position;
+    if (!blockPosition) {
+      if (graph.blocks.length === 0) {
+        blockPosition = { x: 400, y: 100 };
+      } else {
+        const lastBlock = graph.blocks[graph.blocks.length - 1];
+        const lastNode = nodes.find(n => n.id === lastBlock.id);
+        const lastPosition = lastNode?.position || lastBlock.ui?.position || { x: 400, y: 0 };
+        blockPosition = { x: lastPosition.x, y: lastPosition.y + 200 };
+      }
+    }
+
     const newBlock: Block = {
       id,
       type,
       content: getDefaultContent(type),
+      ui: { position: blockPosition },
     };
 
     const updatedBlocks = [...graph.blocks, newBlock];
     const startBlockId = graph.startBlockId || id;
 
+    // Auto-connect to the last block
     const updatedEdges = [...graph.edges];
     if (graph.blocks.length > 0 && !graph.edges.some(e => e.to === id)) {
       const lastBlock = graph.blocks[graph.blocks.length - 1];
@@ -231,7 +444,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setSelectedBlockId(id);
     setShowBlockEditor(true);
     setIsDirty(true);
-  }, [graph]);
+  }, [graph, nodes]);
 
   const updateBlock = useCallback((blockId: string, updates: Partial<Block>) => {
     const updatedBlocks = graph.blocks.map((b) =>
@@ -271,13 +484,11 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
 
     setIsBulkDeleting(true);
     try {
-      const blockIdsArray = Array.from(selectedBlockIds);
       const updatedBlocks = graph.blocks.filter(b => !selectedBlockIds.has(b.id));
       const updatedEdges = graph.edges.filter(
         e => !selectedBlockIds.has(e.from) && !selectedBlockIds.has(e.to)
       );
       
-      // Handle startBlock reassignment if deleted
       let newStartBlockId = graph.startBlockId;
       if (selectedBlockIds.has(graph.startBlockId)) {
         newStartBlockId = updatedBlocks[0]?.id || '';
@@ -315,7 +526,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setSelectedBlockIds(new Set());
   }, []);
 
-  const addEdge = useCallback((fromId: string, toId: string) => {
+  const addGraphEdge = useCallback((fromId: string, toId: string) => {
     const existingEdge = graph.edges.find(
       (e) => e.from === fromId && e.to === toId
     );
@@ -326,7 +537,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setIsDirty(true);
   }, [graph]);
 
-  const removeEdge = useCallback((fromId: string, toId: string) => {
+  const removeGraphEdge = useCallback((fromId: string, toId: string) => {
     const updatedEdges = graph.edges.filter(
       (e) => !(e.from === fromId && e.to === toId)
     );
@@ -339,29 +550,91 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setIsDirty(true);
   }, [graph]);
 
-  const handleBlockClick = (blockId: string) => {
+  // Handle React Flow connections
+  const onConnect = useCallback((connection: Connection) => {
+    if (connection.source && connection.target) {
+      addGraphEdge(connection.source, connection.target);
+    }
+  }, [addGraphEdge]);
+
+  // Handle node click
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node<BlockNodeData>) => {
     if (connectionMode) {
-      if (connectionMode.fromBlockId !== blockId) {
-        addEdge(connectionMode.fromBlockId, blockId);
+      if (connectionMode.fromBlockId !== node.id) {
+        addGraphEdge(connectionMode.fromBlockId, node.id);
       }
       setConnectionMode(null);
     } else {
-      setSelectedBlockId(blockId);
+      setSelectedBlockId(node.id);
       setShowBlockEditor(true);
     }
-  };
+  }, [connectionMode, addGraphEdge]);
+
+  // Handle node drag stop - update positions
+  const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node<BlockNodeData>) => {
+    const updatedBlocks = graph.blocks.map(block => {
+      if (block.id === node.id) {
+        return {
+          ...block,
+          ui: {
+            ...block.ui,
+            position: node.position,
+          },
+        };
+      }
+      return block;
+    });
+    setGraph(prev => ({ ...prev, blocks: updatedBlocks }));
+    setIsDirty(true);
+  }, [graph.blocks]);
+
+  // Handle edge deletion
+  const onEdgesDelete = useCallback((deletedEdges: ReactFlowEdge[]) => {
+    deletedEdges.forEach(edge => {
+      removeGraphEdge(edge.source, edge.target);
+    });
+  }, [removeGraphEdge]);
+
+  // Drag and drop from sidebar
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+
+    const type = event.dataTransfer.getData('application/reactflow-type') as BlockType;
+    if (!type) return;
+
+    const position = screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    addBlock(type, position);
+  }, [screenToFlowPosition, addBlock]);
+
+  const onDragStart = useCallback((event: React.DragEvent, type: BlockType) => {
+    event.dataTransfer.setData('application/reactflow-type', type);
+    event.dataTransfer.effectAllowed = 'move';
+  }, []);
 
   const handleAIGenerate = (generatedGraph: GraphDefinition) => {
-    setGraph(generatedGraph);
+    // Auto-layout generated blocks
+    const blocksWithPositions = generatedGraph.blocks.map((block, index) => ({
+      ...block,
+      ui: {
+        ...block.ui,
+        position: block.ui?.position || { x: 400, y: 100 + index * 200 },
+      },
+    }));
+    setGraph({ ...generatedGraph, blocks: blocksWithPositions });
     setShowAIGenerator(false);
     setIsDirty(true);
     showToast('success', 'AI-generated content added to journey');
+    setTimeout(() => fitView({ padding: 0.2 }), 100);
   };
-
-  const handleReorder = useCallback((newBlocks: Block[], newEdges: Edge[]) => {
-    setGraph({ ...graph, blocks: newBlocks, edges: newEdges });
-    setIsDirty(true);
-  }, [graph]);
 
   const selectedBlock = graph.blocks.find((b) => b.id === selectedBlockId);
 
@@ -370,8 +643,8 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
       {toast && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border ${
           toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
-          toast.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-300' :
-          'bg-blue-500/20 border-blue-500/30 text-blue-300'
+          toast.type === 'error' ? 'bg-error/20 border-error/30 text-error' :
+          'bg-primary-500/20 border-primary-500/30 text-primary-300'
         }`}>
           {toast.type === 'success' ? <Check className="w-5 h-5" /> :
            toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> :
@@ -398,7 +671,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
               <h1 className="text-lg font-semibold text-white">{moduleName}</h1>
               <p className="text-xs text-slate-500">
                 {graph.blocks.length} blocks, {graph.edges.length} connections
-                {isDirty && <span className="text-amber-400 ml-2">Unsaved changes</span>}
+                {isDirty && <span className="text-warning ml-2">Unsaved changes</span>}
               </p>
             </div>
           </div>
@@ -408,7 +681,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
               <button
                 onClick={bulkDeleteBlocks}
                 disabled={isBulkDeleting}
-                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-error text-white rounded-lg text-sm hover:bg-error/90 disabled:opacity-50 transition-colors"
               >
                 {isBulkDeleting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -454,28 +727,33 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
       </header>
 
       <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar with draggable block types */}
         <aside className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
           <div className="p-4 border-b border-slate-700">
-            <h2 className="text-sm font-semibold text-slate-300 mb-3">Add Block</h2>
+            <h2 className="text-sm font-semibold text-slate-300 mb-3">Drag blocks to canvas</h2>
             <div className="grid grid-cols-2 gap-2">
               {BLOCK_TYPES.map(({ type, label, icon: Icon, color }) => (
-                <button
+                <div
                   key={type}
-                  onClick={() => addBlock(type)}
-                  className="flex flex-col items-center gap-1.5 p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors group"
+                  draggable
+                  onDragStart={(e) => onDragStart(e, type)}
+                  className="flex flex-col items-center gap-1.5 p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors group cursor-grab active:cursor-grabbing"
                 >
-                  <div className={`w-8 h-8 ${color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-4 h-4 text-white" />
+                  <div className="flex items-center gap-1">
+                    <GripVertical className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className={`w-8 h-8 ${color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
                   </div>
                   <span className="text-xs text-slate-400 group-hover:text-white">{label}</span>
-                </button>
+                </div>
               ))}
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-300">Block Order</h2>
+              <h2 className="text-sm font-semibold text-slate-300">Blocks List</h2>
               {graph.blocks.length > 0 && (
                 <div className="flex items-center gap-1">
                   {selectedBlockIds.size > 0 ? (
@@ -497,7 +775,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
               )}
             </div>
             {graph.blocks.length === 0 ? (
-              <p className="text-xs text-slate-500">No blocks yet. Add blocks to build your journey.</p>
+              <p className="text-xs text-slate-500">No blocks yet. Drag blocks to the canvas or use AI generate.</p>
             ) : (
               <div className="space-y-2">
                 {graph.blocks.map((block, index) => {
@@ -509,13 +787,17 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                   return (
                     <div
                       key={block.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                      className={`flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer ${
                         selectedBlockIds.has(block.id)
-                          ? 'bg-blue-600/20 border border-blue-500'
+                          ? 'bg-primary-600/20 border border-primary-500'
                           : isSelected
-                          ? 'bg-blue-600/10 border border-blue-400'
+                          ? 'bg-primary-600/10 border border-primary-400'
                           : 'bg-slate-700/50 hover:bg-slate-700 border border-transparent'
                       }`}
+                      onClick={() => {
+                        setSelectedBlockId(block.id);
+                        setShowBlockEditor(true);
+                      }}
                     >
                       <input
                         type="checkbox"
@@ -525,45 +807,30 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                           toggleBlockSelection(block.id);
                         }}
                         disabled={isBulkDeleting}
-                        className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                        className="w-4 h-4 rounded border-slate-600 text-primary-600 focus:ring-primary-500 focus:ring-offset-slate-900"
                       />
-                      <div
-                        onClick={() => handleBlockClick(block.id)}
-                        className="flex items-center gap-2 flex-1 cursor-pointer"
-                      >
-                        <div className={`w-6 h-6 ${blockType?.color || 'bg-slate-600'} rounded flex items-center justify-center`}>
-                          <Icon className="w-3 h-3 text-white" />
+                      <div className={`w-6 h-6 ${blockType?.color || 'bg-slate-600'} rounded flex items-center justify-center`}>
+                        <Icon className="w-3 h-3 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-white truncate">
+                          {(block.content as { title?: string })?.title || `${blockType?.label || 'Block'} ${index + 1}`}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-white truncate">
-                            {(block.content as { title?: string })?.title || `${blockType?.label || 'Block'} ${index + 1}`}
-                          </div>
-                          <div className="flex items-center gap-1 text-xs text-slate-500">
-                            {isStart && <span className="text-emerald-400">Start</span>}
-                            {!isStart && <span>{blockType?.label}</span>}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {!isStart && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setStartBlock(block.id); }}
-                              disabled={isBulkDeleting}
-                              className="p-1 text-slate-500 hover:text-emerald-400 rounded disabled:opacity-50"
-                              title="Set as start"
-                            >
-                              <Flag className="w-3 h-3" />
-                            </button>
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setConnectionMode({ fromBlockId: block.id }); }}
-                            disabled={isBulkDeleting}
-                            className={`p-1 rounded disabled:opacity-50 ${connectionMode?.fromBlockId === block.id ? 'text-blue-400 bg-blue-500/20' : 'text-slate-500 hover:text-blue-400'}`}
-                            title="Connect to another block"
-                          >
-                            <Link2 className="w-3 h-3" />
-                          </button>
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          {isStart && <span className="text-emerald-400">Start</span>}
+                          {!isStart && <span>{blockType?.label}</span>}
                         </div>
                       </div>
+                      {!isStart && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setStartBlock(block.id); }}
+                          disabled={isBulkDeleting}
+                          className="p-1 text-slate-500 hover:text-emerald-400 rounded disabled:opacity-50"
+                          title="Set as start"
+                        >
+                          <Flag className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -572,12 +839,12 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
           </div>
 
           {connectionMode && (
-            <div className="p-3 bg-blue-600/20 border-t border-blue-500/30">
+            <div className="p-3 bg-primary-600/20 border-t border-primary-500/30">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-blue-300">Click a block to connect</span>
+                <span className="text-sm text-primary-300">Click a block to connect</span>
                 <button
                   onClick={() => setConnectionMode(null)}
-                  className="text-xs text-blue-400 hover:text-blue-300"
+                  className="text-xs text-primary-400 hover:text-primary-300"
                 >
                   Cancel
                 </button>
@@ -586,17 +853,68 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
           )}
         </aside>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto p-6 bg-slate-900/50">
-            {graph.blocks.length === 0 ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
+        {/* React Flow Canvas */}
+        <div className="flex-1 flex flex-col overflow-hidden" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onNodeDragStop={onNodeDragStop}
+            onEdgesDelete={onEdgesDelete}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            nodeTypes={nodeTypes}
+            defaultEdgeOptions={defaultEdgeOptions}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            className="bg-slate-900"
+            proOptions={{ hideAttribution: true }}
+            deleteKeyCode={['Backspace', 'Delete']}
+            selectionOnDrag
+            panOnDrag={[1, 2]}
+            selectionMode={1}
+          >
+            <Background color="#334155" gap={20} size={1} />
+            <Controls className="bg-slate-800 border border-slate-700 rounded-lg" />
+            <MiniMap
+              nodeColor={(node) => {
+                const block = graph.blocks.find(b => b.id === node.id);
+                if (!block) return '#475569';
+                const blockType = BLOCK_TYPES.find(bt => bt.type === block.type);
+                // Return hex colors based on block type
+                switch (block.type) {
+                  case 'read': return '#6366f1';
+                  case 'video': return '#f43f5e';
+                  case 'image': return '#10b981';
+                  case 'quiz': return '#a855f7';
+                  case 'mission': return '#f97316';
+                  case 'form': return '#14b8a6';
+                  case 'ai_help': return '#06b6d4';
+                  case 'checkpoint': return '#eab308';
+                  case 'animation': return '#ec4899';
+                  case 'code': return '#475569';
+                  case 'exercise': return '#8b5cf6';
+                  case 'resource': return '#6366f1';
+                  default: return '#475569';
+                }
+              }}
+              maskColor="rgba(15, 23, 42, 0.8)"
+              className="bg-slate-800 border border-slate-700 rounded-lg"
+            />
+            
+            {/* Empty state overlay */}
+            {graph.blocks.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center pointer-events-auto">
                   <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
                     <Plus className="w-8 h-8 text-slate-600" />
                   </div>
                   <h3 className="text-lg font-medium text-slate-400 mb-2">Start Building Your Journey</h3>
                   <p className="text-slate-500 mb-4 max-w-md">
-                    Add blocks from the sidebar to create your learning path, or use AI to generate a complete course outline.
+                    Drag blocks from the sidebar to create your learning path, or use AI to generate a complete course outline.
                   </p>
                   <button
                     onClick={() => setShowAIGenerator(true)}
@@ -607,121 +925,8 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {graph.blocks.map((block, index) => {
-                  const blockType = BLOCK_TYPES.find((bt) => bt.type === block.type);
-                  const Icon = blockType?.icon || BookOpen;
-                  const isStart = graph.startBlockId === block.id;
-                  const isSelected = selectedBlockId === block.id;
-                  const outgoingEdges = graph.edges.filter((e) => e.from === block.id);
-                  const incomingEdges = graph.edges.filter((e) => e.to === block.id);
-
-                  return (
-                    <div key={block.id} className="relative">
-                      {incomingEdges.length > 0 && index > 0 && (
-                        <div className="flex items-center justify-center py-2">
-                          <div className="w-0.5 h-6 bg-slate-700" />
-                        </div>
-                      )}
-
-                      <div
-                        className={`relative p-4 rounded-xl transition-all ${
-                          selectedBlockIds.has(block.id)
-                            ? 'bg-slate-700 ring-2 ring-blue-500'
-                            : isSelected
-                            ? 'bg-slate-700 ring-2 ring-blue-400'
-                            : 'bg-slate-800 hover:bg-slate-700/80'
-                        } ${connectionMode && connectionMode.fromBlockId !== block.id ? 'ring-2 ring-blue-400/50 ring-dashed' : ''}`}
-                      >
-                        <div className="absolute top-2 left-2 z-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedBlockIds.has(block.id)}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              toggleBlockSelection(block.id);
-                            }}
-                            disabled={isBulkDeleting}
-                            className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
-                          />
-                        </div>
-
-                        <div
-                          onClick={() => handleBlockClick(block.id)}
-                          className="cursor-pointer"
-                        >
-                          {isStart && (
-                            <div className="absolute -top-2 left-12 px-2 py-0.5 bg-emerald-500 text-white text-xs font-medium rounded">
-                              START
-                            </div>
-                          )}
-
-                          <div className="flex items-start gap-4 pl-8">
-                          <div className={`w-12 h-12 ${blockType?.color || 'bg-slate-600'} rounded-xl flex items-center justify-center flex-shrink-0`}>
-                            <Icon className="w-6 h-6 text-white" />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-semibold text-white mb-1">
-                              {(block.content as { title?: string })?.title || `${blockType?.label || 'Block'} Block`}
-                            </h3>
-                            <p className="text-sm text-slate-400">
-                              {getBlockDescription(block)}
-                            </p>
-
-                            {outgoingEdges.length > 0 && (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {outgoingEdges.map((edge) => {
-                                  const targetBlock = graph.blocks.find((b) => b.id === edge.to);
-                                  return (
-                                    <div
-                                      key={`${edge.from}-${edge.to}`}
-                                      className="flex items-center gap-1 px-2 py-1 bg-slate-900/50 rounded text-xs text-slate-400"
-                                    >
-                                      <ArrowRight className="w-3 h-3" />
-                                      {(targetBlock?.content as { title?: string })?.title || 'Next block'}
-                                      {edge.condition && (
-                                        <span className="text-amber-400 ml-1">(conditional)</span>
-                                      )}
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); removeEdge(edge.from, edge.to); }}
-                                        className="ml-1 text-slate-500 hover:text-red-400"
-                                      >
-                                        <Unlink className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedBlockId(block.id); setShowBlockEditor(true); }}
-                                disabled={isBulkDeleting}
-                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                <Settings2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
-                                disabled={isBulkDeleting}
-                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             )}
-          </div>
+          </ReactFlow>
         </div>
 
         {showBlockEditor && selectedBlock && (
@@ -751,9 +956,20 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
           onGenerate={handleAIGenerate}
           onClose={() => setShowAIGenerator(false)}
           existingGraph={graph}
+          trackModulesContext={trackModulesContext}
+          currentModuleId={moduleId}
         />
       )}
     </div>
+  );
+}
+
+// Wrap with ReactFlowProvider
+export function JourneyBuilder(props: JourneyBuilderProps) {
+  return (
+    <ReactFlowProvider>
+      <JourneyBuilderInner {...props} />
+    </ReactFlowProvider>
   );
 }
 
@@ -785,43 +1001,5 @@ function getDefaultContent(type: BlockType): Block['content'] {
       return { title: 'Resources', resources: [] };
     default:
       return { title: 'New Block' };
-  }
-}
-
-function getBlockDescription(block: Block): string {
-  const content = block.content as Record<string, unknown>;
-
-  switch (block.type) {
-    case 'read':
-      return `${content.estimatedReadTime || 0} min read`;
-    case 'video':
-      return content.url ? 'Video attached' : 'No video set';
-    case 'image':
-      return content.url ? 'Image attached' : 'No image set';
-    case 'quiz':
-      const questions = (content.questions as unknown[]) || [];
-      return `${questions.length} question${questions.length !== 1 ? 's' : ''}, ${content.passingScore || 50}% to pass`;
-    case 'mission':
-      const steps = (content.steps as unknown[]) || [];
-      return `${steps.length} step${steps.length !== 1 ? 's' : ''}`;
-    case 'form':
-      const fields = (content.fields as unknown[]) || [];
-      return `${fields.length} field${fields.length !== 1 ? 's' : ''}`;
-    case 'ai_help':
-      return `Mode: ${content.mode || 'remediation'}`;
-    case 'checkpoint':
-      return 'Progress checkpoint';
-    case 'animation':
-      return content.animationType as string || 'Animation';
-    case 'code':
-      return content.language as string || 'Code snippet';
-    case 'exercise':
-      const hints = (content.hints as unknown[]) || [];
-      return `${hints.length} hint${hints.length !== 1 ? 's' : ''}`;
-    case 'resource':
-      const resources = (content.resources as unknown[]) || [];
-      return `${resources.length} resource${resources.length !== 1 ? 's' : ''}`;
-    default:
-      return '';
   }
 }

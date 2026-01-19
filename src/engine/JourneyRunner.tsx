@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../hooks';
+import { useTranslation } from '../contexts';
 import { findNextBlock, buildFactsFromBlockState } from './conditions';
 import { RTLProvider } from '../contexts/RTLContext';
 import {
@@ -43,11 +44,14 @@ interface JourneyRunnerProps {
   journeyVersionId: string;
   userId: string;
   graph: GraphDefinition;
-  onComplete: () => void;
+  onComplete: (nextModuleInfo?: { versionId: string; moduleTitle: string }) => void;
   onExit: () => void;
   // Optional: can be passed directly if already loaded
   trackDirection?: 'rtl' | 'ltr';
   trackLanguage?: string;
+  // Optional: for multi-module progression
+  trackIdProp?: string;
+  currentModuleIdProp?: string;
 }
 
 interface QuizContext {
@@ -68,7 +72,10 @@ export function JourneyRunner({
   onExit,
   trackDirection: initialDirection,
   trackLanguage: initialLanguage,
+  trackIdProp,
+  currentModuleIdProp,
 }: JourneyRunnerProps) {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const [run, setRun] = useState<UserJourneyRun | null>(null);
   const [currentBlock, setCurrentBlock] = useState<Block | null>(null);
@@ -83,10 +90,11 @@ export function JourneyRunner({
     blocksCompleted: number;
     averageScore: number;
   } | null>(null);
+  const [nextModuleInfo, setNextModuleInfo] = useState<{ versionId: string; moduleTitle: string } | null>(null);
   const [direction, setDirection] = useState<'rtl' | 'ltr'>(initialDirection || 'ltr');
   const [primaryLanguage, setPrimaryLanguage] = useState<string>(initialLanguage || 'en');
-  const [trackId, setTrackId] = useState<string | undefined>();
-  const [moduleId, setModuleId] = useState<string | undefined>();
+  const [trackId, setTrackId] = useState<string | undefined>(trackIdProp);
+  const [moduleId, setModuleId] = useState<string | undefined>(currentModuleIdProp);
   const blockStartTime = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -153,7 +161,7 @@ export function JourneyRunner({
 
       if (fetchError) {
         console.error('Failed to fetch existing run:', fetchError);
-        throw new Error('Failed to load your progress. Please try again.');
+        throw new Error(t('journey.error.failed'));
       }
 
       let journeyRun = existingRun;
@@ -173,7 +181,7 @@ export function JourneyRunner({
 
         if (error) {
           console.error('Failed to create journey run:', error);
-          throw new Error('Failed to start your journey. Please try again.');
+          throw new Error(t('journey.error.failed'));
         }
 
         journeyRun = newRun;
@@ -229,22 +237,44 @@ export function JourneyRunner({
     let state = blockStates.get(blockId);
 
     if (!state) {
-      const { data: newState, error } = await supabase
+      // First, check if a block state already exists in the database
+      const { data: existingState, error: fetchError } = await supabase
         .from('user_block_states')
-        .insert({
-          run_id: runId,
-          block_id: blockId,
-          status: 'in_progress',
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('run_id', runId)
+        .eq('block_id', blockId)
+        .maybeSingle();
 
-      if (!error && newState) {
-        state = newState;
-        setBlockStates((prev) => new Map(prev).set(blockId, newState));
+      if (fetchError) {
+        console.error('Error fetching block state:', fetchError);
       }
-    } else if (state.status === 'not_started') {
+
+      if (existingState) {
+        // Found existing state in database, use it and update local state
+        state = existingState;
+        setBlockStates((prev) => new Map(prev).set(blockId, existingState));
+      } else {
+        // No existing state found, create a new one
+        const { data: newState, error } = await supabase
+          .from('user_block_states')
+          .insert({
+            run_id: runId,
+            block_id: blockId,
+            status: 'in_progress',
+            started_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (!error && newState) {
+          state = newState;
+          setBlockStates((prev) => new Map(prev).set(blockId, newState));
+        }
+      }
+    }
+
+    // Update status to 'in_progress' if it's 'not_started'
+    if (state && state.status === 'not_started') {
       const { data: updatedState } = await supabase
         .from('user_block_states')
         .update({
@@ -306,6 +336,7 @@ export function JourneyRunner({
       if (nextBlockId) {
         await navigateToBlock(nextBlockId, run.id);
       } else {
+        // No next block in current module - mark module as completed
         await supabase
           .from('user_journey_runs')
           .update({
@@ -328,6 +359,11 @@ export function JourneyRunner({
           blocksCompleted: allStates.filter(s => s.status === 'completed').length,
           averageScore: Math.round(averageScore),
         });
+
+        // Check if there's a next module in the track
+        const nextModule = await checkForNextModule();
+        setNextModuleInfo(nextModule);
+        
         setShowCompletionScreen(true);
       }
     },
@@ -374,6 +410,43 @@ export function JourneyRunner({
     [completeBlock]
   );
 
+  const checkForNextModule = async (): Promise<{ versionId: string; moduleTitle: string } | null> => {
+    if (!trackId || !moduleId) return null;
+    
+    try {
+      // Get current module's order_index
+      const { data: currentModule } = await supabase
+        .from('modules')
+        .select('order_index')
+        .eq('id', moduleId)
+        .single();
+      
+      if (!currentModule) return null;
+      
+      // Find next module in sequence
+      const { data: nextModule } = await supabase
+        .from('modules')
+        .select('id, title, journey_versions(id, status)')
+        .eq('track_id', trackId)
+        .eq('order_index', currentModule.order_index + 1)
+        .maybeSingle();
+      
+      if (!nextModule) return null;
+      
+      const publishedVersion = (nextModule.journey_versions as any[])?.find(
+        (v: any) => v.status === 'published'
+      );
+      
+      return publishedVersion ? {
+        versionId: publishedVersion.id,
+        moduleTitle: nextModule.title,
+      } : null;
+    } catch (error) {
+      console.error('Error checking for next module:', error);
+      return null;
+    }
+  };
+
   const handleRestartJourney = async () => {
     if (!run) return;
 
@@ -405,11 +478,11 @@ export function JourneyRunner({
       setBlockStates(new Map());
       setShowCompletionScreen(false);
       setCompletionStats(null);
-      showToast('success', 'Journey restarted! Good luck!');
+      showToast('success', t('journey.completion.restart'));
       await navigateToBlock(graph.startBlockId, run.id);
     } catch (error) {
       console.error('Restart journey error:', error);
-      showToast('error', 'Failed to restart journey. Please try again.');
+      showToast('error', t('journey.error.failed'));
     }
   };
 
@@ -567,8 +640,8 @@ export function JourneyRunner({
     return (
       <div className="flex items-center justify-center h-screen bg-slate-100">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading your journey...</p>
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">{t('journey.loading')}</p>
         </div>
       </div>
     );
@@ -578,25 +651,25 @@ export function JourneyRunner({
     return (
       <div className="flex items-center justify-center h-screen bg-slate-100">
         <div className="text-center max-w-md px-4">
-          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertCircle className="w-8 h-8 text-red-600" />
+          <div className="w-16 h-16 mx-auto mb-4 bg-error/20 rounded-full flex items-center justify-center">
+            <AlertCircle className="w-8 h-8 text-error" />
           </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Unable to Load Journey</h2>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">{t('journey.error.title')}</h2>
           <p className="text-slate-600 mb-6">{initError}</p>
           <div className="flex flex-col gap-3">
             <button
               onClick={() => initializeRun()}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors"
             >
               <RotateCcw className="w-5 h-5" />
-              Try Again
+              {t('journey.error.tryAgain')}
             </button>
             <button
               onClick={onExit}
               className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-300 transition-colors"
             >
               <Home className="w-5 h-5" />
-              Back to Dashboard
+              {t('journey.error.backToDashboard')}
             </button>
           </div>
         </div>
@@ -612,34 +685,34 @@ export function JourneyRunner({
             <div className="w-24 h-24 mx-auto bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
               <Trophy className="w-12 h-12 text-white" />
             </div>
-            <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center animate-bounce">
+            <div className="absolute -top-2 -right-2 w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center animate-bounce">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
           </div>
 
           <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Journey Complete!
+            {t('journey.completion.title')}
           </h1>
           <p className="text-slate-600 mb-8">
-            Congratulations! You've successfully completed this learning journey.
+            {t('journey.completion.congratulations')}
           </p>
 
           {completionStats && (
             <div className="grid grid-cols-3 gap-4 mb-8">
               <div className="bg-slate-50 rounded-xl p-4">
-                <div className="w-10 h-10 mx-auto mb-2 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Target className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 mx-auto mb-2 bg-primary-100 rounded-lg flex items-center justify-center">
+                  <Target className="w-5 h-5 text-primary-600" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">{completionStats.blocksCompleted}</div>
-                <div className="text-xs text-slate-500">Blocks Completed</div>
+                <div className="text-xs text-slate-500">{t('journey.completion.stats.blocksCompleted')}</div>
               </div>
 
               <div className="bg-slate-50 rounded-xl p-4">
-                <div className="w-10 h-10 mx-auto mb-2 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <Star className="w-5 h-5 text-amber-600" />
+                <div className="w-10 h-10 mx-auto mb-2 bg-warning/20 rounded-lg flex items-center justify-center">
+                  <Star className="w-5 h-5 text-warning" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">{completionStats.averageScore}%</div>
-                <div className="text-xs text-slate-500">Average Score</div>
+                <div className="text-xs text-slate-500">{t('journey.completion.stats.averageScore')}</div>
               </div>
 
               <div className="bg-slate-50 rounded-xl p-4">
@@ -647,27 +720,49 @@ export function JourneyRunner({
                   <Clock className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">{formatTime(completionStats.totalTime)}</div>
-                <div className="text-xs text-slate-500">Time Spent</div>
+                <div className="text-xs text-slate-500">{t('journey.completion.stats.timeSpent')}</div>
               </div>
             </div>
           )}
 
           <div className="flex flex-col gap-3">
-            <button
-              onClick={onComplete}
-              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-            >
-              <Home className="w-5 h-5" />
-              Back to Dashboard
-            </button>
+            {nextModuleInfo ? (
+              <>
+                <button
+                  onClick={() => onComplete(nextModuleInfo)}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Continue to: {nextModuleInfo.moduleTitle}
+                </button>
+                
+                <button
+                  onClick={() => onComplete()}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  <Home className="w-5 h-5" />
+                  {t('journey.completion.backToDashboard')}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => onComplete()}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  <Home className="w-5 h-5" />
+                  {t('journey.completion.backToDashboard')}
+                </button>
 
-            <button
-              onClick={handleRestartJourney}
-              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
-            >
-              <RotateCcw className="w-5 h-5" />
-              Restart Journey
-            </button>
+                <button
+                  onClick={handleRestartJourney}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                  {t('journey.completion.restart')}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -690,13 +785,13 @@ export function JourneyRunner({
             className={`flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             <ChevronLeft className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
-            <span className="font-medium">{isRTL ? 'خروج' : 'Exit'}</span>
+            <span className="font-medium">{t('journey.exit')}</span>
           </button>
 
           <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className={`h-full bg-blue-600 transition-all duration-300 ${isRTL ? 'mr-auto' : ''}`}
+                className={`h-full bg-primary-600 transition-all duration-300 ${isRTL ? 'mr-auto' : ''}`}
                 style={{ width: `${progress}%`, marginLeft: isRTL ? 'auto' : undefined, marginRight: isRTL ? '0' : undefined }}
               />
             </div>

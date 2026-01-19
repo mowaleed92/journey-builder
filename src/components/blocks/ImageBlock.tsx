@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Image, ZoomIn, ZoomOut, ChevronRight, Loader2 } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 
 interface ImageBlockContent {
   title: string;
@@ -15,6 +16,7 @@ interface ImageBlockProps {
 }
 
 export function ImageBlock({ content, onComplete, isCompleted }: ImageBlockProps) {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [isZoomed, setIsZoomed] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -98,10 +100,10 @@ export function ImageBlock({ content, onComplete, isCompleted }: ImageBlockProps
             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${
               isCompleted
                 ? 'bg-emerald-100 text-emerald-700 cursor-default'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-primary-600 text-white hover:bg-primary-700'
             }`}
           >
-            {isCompleted ? 'Completed' : 'Continue'}
+            {isCompleted ? t('blocks.complete') : t('blocks.continue')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

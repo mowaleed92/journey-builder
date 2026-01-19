@@ -21,6 +21,15 @@ interface GraphDefinition {
   }>;
 }
 
+interface TrackModuleContext {
+  moduleId: string;
+  title: string;
+  description: string | null;
+  orderIndex: number;
+  isCurrent: boolean;
+  graph: GraphDefinition | null;
+}
+
 interface GenerateRequest {
   type: 'outline' | 'content' | 'quiz' | 'video_script';
   topic: string;
@@ -43,6 +52,8 @@ interface GenerateRequest {
   existingGraph?: GraphDefinition;
   enableWebResearch?: boolean;
   model?: string;
+  trackModulesContext?: TrackModuleContext[];
+  generateImages?: boolean;
 }
 
 interface TavilySearchResult {
@@ -145,7 +156,8 @@ Deno.serve(async (req: Request) => {
       includeVideo, includeQuiz, includeMission, includeImage, includeCode, 
       includeExercise, includeResource, includeForm, includeAIHelp, 
       includeCheckpoint, includeAnimation,
-      existingContent, existingGraph, enableWebResearch = true, model = 'gpt-4o' 
+      existingContent, existingGraph, enableWebResearch = true, model = 'gpt-4o',
+      trackModulesContext, generateImages = false
     } = body;
 
     // Perform web research if enabled
@@ -153,6 +165,90 @@ Deno.serve(async (req: Request) => {
     if (enableWebResearch && topic) {
       const searchQuery = `${topic} ${targetAudience ? `for ${targetAudience}` : ''} tutorial guide best practices ${new Date().getFullYear()}`;
       webResearchContext = await searchWeb(searchQuery);
+    }
+
+    // Format FULL track context for AI (with complete content from all modules)
+    let trackContext = '';
+    if (trackModulesContext && trackModulesContext.length > 1) {
+      const totalModules = trackModulesContext.length;
+      const currentModule = trackModulesContext.find(m => m.isCurrent);
+      const previousModules = trackModulesContext.filter(m => !m.isCurrent && m.orderIndex < (currentModule?.orderIndex ?? 999));
+
+      if (previousModules.length > 0) {
+        trackContext = '\n\n═══════════════════════════════════════════════════════════════\n';
+        trackContext += `TRACK LEARNING PROGRESSION (FULL CONTENT):\n`;
+        trackContext += `This is Module ${(currentModule?.orderIndex ?? 0) + 1} of ${totalModules} in the track.\n`;
+        trackContext += `Here is the COMPLETE content from previous modules:\n`;
+        trackContext += '═══════════════════════════════════════════════════════════════\n\n';
+
+        previousModules.forEach((module) => {
+          trackContext += `\n═══════════════════════════════════════════════════════════════\n`;
+          trackContext += `MODULE ${module.orderIndex + 1} of ${totalModules}: "${module.title}"\n`;
+          if (module.description) {
+            trackContext += `Description: ${module.description}\n`;
+          }
+          trackContext += `═══════════════════════════════════════════════════════════════\n\n`;
+
+          if (module.graph && module.graph.blocks && module.graph.blocks.length > 0) {
+            module.graph.blocks.forEach((block, index) => {
+              const content = block.content as Record<string, unknown>;
+              trackContext += `Block ${index + 1} [${block.type.toUpperCase()}] "${content.title || 'Untitled'}"\n`;
+              trackContext += '---\n';
+
+              // Include FULL content (not previews)
+              if (block.type === 'read' && content.markdown) {
+                trackContext += `${content.markdown}\n`;
+              } else if (block.type === 'quiz' && Array.isArray(content.questions)) {
+                trackContext += `Quiz with ${content.questions.length} questions:\n`;
+                content.questions.forEach((q: any, qIdx: number) => {
+                  trackContext += `${qIdx + 1}. ${q.prompt}\n`;
+                  trackContext += `   Choices: ${q.choices?.join(', ')}\n`;
+                  trackContext += `   Correct Answer: ${q.choices?.[q.correctIndex]}\n`;
+                  if (q.explanation) {
+                    trackContext += `   Explanation: ${q.explanation}\n`;
+                  }
+                });
+              } else if (block.type === 'code' && content.code) {
+                trackContext += `Language: ${content.language}\n`;
+                trackContext += '```\n';
+                trackContext += `${content.code}\n`;
+                trackContext += '```\n';
+                if (content.description) {
+                  trackContext += `Description: ${content.description}\n`;
+                }
+              } else if (block.type === 'mission' && Array.isArray(content.steps)) {
+                trackContext += `Mission with ${content.steps.length} steps:\n`;
+                content.steps.forEach((step: any, sIdx: number) => {
+                  trackContext += `${sIdx + 1}. ${step.instruction}\n`;
+                });
+              } else if (block.type === 'exercise' && content.problem) {
+                trackContext += `Problem: ${content.problem}\n`;
+                if (Array.isArray(content.hints) && content.hints.length > 0) {
+                  trackContext += `Hints: ${content.hints.join('; ')}\n`;
+                }
+                if (content.solution) {
+                  trackContext += `Solution: ${content.solution}\n`;
+                }
+              } else if (content.description) {
+                trackContext += `${content.description}\n`;
+              }
+              trackContext += '---\n\n';
+            });
+          } else {
+            trackContext += '(No content yet)\n\n';
+          }
+        });
+
+        trackContext += '\n═══════════════════════════════════════════════════════════════\n';
+        trackContext += `MODULE ${(currentModule?.orderIndex ?? 0) + 1} of ${totalModules}: "${currentModule?.title || 'Current Module'}" (CURRENT - YOU ARE GENERATING THIS)\n`;
+        trackContext += '═══════════════════════════════════════════════════════════════\n\n';
+        trackContext += 'CRITICAL INSTRUCTIONS:\n';
+        trackContext += '- You have access to the COMPLETE content above - use it to ensure continuity\n';
+        trackContext += '- Build upon concepts already taught (don\'t re-explain basics)\n';
+        trackContext += '- Reference specific content from previous modules where appropriate\n';
+        trackContext += '- Do NOT repeat information already covered\n';
+        trackContext += '- Progress to more advanced topics that logically follow\n\n';
+      }
     }
 
     // Format existing graph context for AI
@@ -185,10 +281,33 @@ Deno.serve(async (req: Request) => {
     let systemPrompt = '';
     let userPrompt = '';
 
+    // Determine if this is a track continuation
+    const isTrackContinuation = trackModulesContext && trackModulesContext.length > 1;
+    const currentModuleInfo = trackModulesContext?.find(m => m.isCurrent);
+    const previousModulesWithContent = trackModulesContext?.filter(
+      m => !m.isCurrent && m.orderIndex < (currentModuleInfo?.orderIndex ?? 999) && m.graph?.blocks?.length > 0
+    ) || [];
+    const hasTrackContext = previousModulesWithContent.length > 0;
+
     switch (type) {
       case 'outline':
         systemPrompt = `You are an expert instructional designer. Generate a course outline as a JSON object.
 
+${hasTrackContext ? `
+CRITICAL - TRACK CONTINUATION MODE:
+You are generating content for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1} of ${trackModulesContext?.length} in a learning track.
+This module titled "${currentModuleInfo?.title || 'Current Module'}" MUST continue from the previous module(s).
+
+MANDATORY REQUIREMENTS:
+1. You MUST build upon concepts already taught in previous modules - DO NOT start from scratch
+2. You MUST NOT repeat or re-explain content already covered
+3. You MUST reference and connect to previous content where appropriate
+4. You MUST progress to more advanced topics that logically follow
+5. The user's topic description tells you WHAT to cover next, but you MUST ensure it flows naturally from previous content
+6. If the user's topic seems disconnected, find a way to bridge it with previous content
+
+The FULL content from previous modules will be provided. Use it extensively.
+` : ''}
 The response MUST be valid JSON in this exact format:
 {
   "startBlockId": "block_1",
@@ -360,9 +479,41 @@ IMPORTANT:
 - Quiz questions should test understanding, not just recall
 - Add branching: if quiz score < 50%, route to ai_help block, then back to quiz
 - Only include block types that are requested
-- Return ONLY valid JSON, no markdown code blocks or explanations`;
+- Return ONLY valid JSON, no markdown code blocks or explanations
+${hasTrackContext ? `- CRITICAL: This is part of a learning track. Content MUST continue from previous modules, not start fresh. Reference previous content explicitly.` : ''}`;
 
-        userPrompt = `Create a course outline about: ${topic}
+        // Build user prompt with track context FIRST if this is a continuation
+        if (hasTrackContext) {
+          userPrompt = `${trackContext}
+
+NOW GENERATE MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1}: "${currentModuleInfo?.title || topic}"
+
+The user wants this module to cover: ${topic}
+
+REMEMBER: This MUST continue from the previous module(s) shown above. Do NOT create standalone content.
+Start where the previous module left off and build upon those concepts.
+
+Target audience: ${targetAudience || 'beginners'}
+Difficulty: ${difficulty || 'beginner'}
+Estimated duration: ${duration || 20} minutes
+Number of blocks: ${blockCount || 6}
+
+BLOCK TYPES TO INCLUDE:
+- Video blocks: ${includeVideo ? 'yes' : 'no'}
+- Image blocks: ${includeImage ? 'yes' : 'no'}
+- Code snippets: ${includeCode ? 'yes' : 'no'}
+- Additional resources: ${includeResource ? 'yes' : 'no'}
+- Quiz & assessment: ${includeQuiz !== false ? 'yes' : 'no'}
+- Hands-on mission: ${includeMission !== false ? 'yes' : 'no'}
+- Practice exercises: ${includeExercise ? 'yes' : 'no'}
+- Data collection forms: ${includeForm ? 'yes' : 'no'}
+- AI help/remediation: ${includeAIHelp ? 'yes (add after quiz for failed attempts)' : 'no'}
+- Progress checkpoints: ${includeCheckpoint ? 'yes' : 'no'}
+- Animations: ${includeAnimation ? 'yes' : 'no'}
+
+Generate content that naturally continues the learning progression. Reference concepts from previous modules. Only include the block types marked "yes" above.${existingContext}${webResearchContext}`;
+        } else {
+          userPrompt = `Create a course outline about: ${topic}
 
 Target audience: ${targetAudience || 'beginners'}
 Difficulty: ${difficulty || 'beginner'}
@@ -383,11 +534,15 @@ BLOCK TYPES TO INCLUDE:
 - Animations: ${includeAnimation ? 'yes' : 'no'}
 
 Generate comprehensive educational content with proper flow and branching logic. Only include the block types marked "yes" above.${existingContext}${webResearchContext}`;
+        }
         break;
 
       case 'content':
         systemPrompt = `You are an expert educational content writer. Generate engaging, clear educational content in Markdown format.
-
+${hasTrackContext ? `
+IMPORTANT: This content is for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1} in a learning track.
+You MUST continue from previous modules - do not start from scratch or repeat covered material.
+` : ''}
 Guidelines:
 - Use clear headings and structure
 - Include practical examples and analogies
@@ -397,17 +552,34 @@ Guidelines:
 - Add blockquotes for key takeaways
 - Keep paragraphs short and readable`;
 
-        userPrompt = `Write educational content about: ${topic}
+        if (hasTrackContext) {
+          userPrompt = `${trackContext}
+
+NOW WRITE CONTENT FOR MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1}: "${currentModuleInfo?.title || topic}"
+Topic to cover: ${topic}
+
+This content MUST continue from the previous module(s). Reference concepts already taught.
 
 Target audience: ${targetAudience || 'beginners'}
 Difficulty: ${difficulty || 'beginner'}
 
 ${existingContent ? `Build upon this existing content:\n${existingContent}` : ''}${existingContext}${webResearchContext}`;
+        } else {
+          userPrompt = `Write educational content about: ${topic}
+
+Target audience: ${targetAudience || 'beginners'}
+Difficulty: ${difficulty || 'beginner'}
+
+${existingContent ? `Build upon this existing content:\n${existingContent}` : ''}${existingContext}${webResearchContext}`;
+        }
         break;
 
       case 'quiz':
         systemPrompt = `You are an expert assessment designer. Generate quiz questions as a JSON array.
-
+${hasTrackContext ? `
+IMPORTANT: These questions are for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1} in a learning track.
+Questions should test understanding of THIS module's content while assuming knowledge from previous modules.
+` : ''}
 Response format:
 [
   {
@@ -427,14 +599,28 @@ Guidelines:
 - Tags help identify weak areas
 - Return ONLY valid JSON array`;
 
-        userPrompt = `Generate 4-6 quiz questions about: ${topic}
+        if (hasTrackContext) {
+          userPrompt = `${trackContext}
+
+Generate 4-6 quiz questions for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1}: "${currentModuleInfo?.title || topic}"
+Topic: ${topic}
+
+Questions should test this module's content while building on knowledge from previous modules.
 
 ${existingContent ? `Based on this content:\n${existingContent}` : ''}${existingContext}${webResearchContext}`;
+        } else {
+          userPrompt = `Generate 4-6 quiz questions about: ${topic}
+
+${existingContent ? `Based on this content:\n${existingContent}` : ''}${existingContext}${webResearchContext}`;
+        }
         break;
 
       case 'video_script':
         systemPrompt = `You are a video script writer for educational content. Generate a script that's engaging and educational.
-
+${hasTrackContext ? `
+IMPORTANT: This script is for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1} in a learning track.
+Reference previous modules and continue the learning journey - don't start from scratch.
+` : ''}
 Format:
 - Start with a hook
 - Clear structure with timestamps
@@ -442,10 +628,22 @@ Format:
 - Include visual cues in [brackets]
 - End with a summary and call to action`;
 
-        userPrompt = `Write a video script about: ${topic}
+        if (hasTrackContext) {
+          userPrompt = `${trackContext}
+
+Write a video script for MODULE ${(currentModuleInfo?.orderIndex ?? 0) + 1}: "${currentModuleInfo?.title || topic}"
+Topic: ${topic}
+
+This script should continue from previous modules and reference concepts already covered.
 
 Duration: ${duration || 5} minutes
 Target audience: ${targetAudience || 'beginners'}${existingContext}${webResearchContext}`;
+        } else {
+          userPrompt = `Write a video script about: ${topic}
+
+Duration: ${duration || 5} minutes
+Target audience: ${targetAudience || 'beginners'}${existingContext}${webResearchContext}`;
+        }
         break;
 
       default:
@@ -488,6 +686,52 @@ Target audience: ${targetAudience || 'beginners'}${existingContext}${webResearch
       try {
         content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         const parsed = JSON.parse(content);
+        
+        // Auto-generate images for image blocks if requested
+        if (type === 'outline' && generateImages && parsed.blocks) {
+          console.log('Generating images for image blocks...');
+          for (const block of parsed.blocks) {
+            if (block.type === 'image' && block.content && !block.content.url) {
+              try {
+                const imagePrompt = block.content.caption 
+                  ? `${block.content.caption}`
+                  : `Educational illustration for: ${block.content.title}`;
+                
+                console.log(`Generating image for: ${block.content.title}`);
+                
+                // Call the image-generator edge function
+                const imageResponse = await fetch(
+                  `${Deno.env.get('SUPABASE_URL')}/functions/v1/image-generator`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+                    },
+                    body: JSON.stringify({
+                      prompt: imagePrompt,
+                      model: 'gpt-image-1.5',
+                      contextTitle: block.content.title,
+                    }),
+                  }
+                );
+
+                if (imageResponse.ok) {
+                  const imageData = await imageResponse.json();
+                  block.content.url = imageData.url;
+                  console.log(`Image generated successfully for: ${block.content.title}`);
+                } else {
+                  console.error(`Failed to generate image for: ${block.content.title}`);
+                  // Leave URL empty if generation fails
+                }
+              } catch (imgError) {
+                console.error('Error generating image:', imgError);
+                // Continue with empty URL if image generation fails
+              }
+            }
+          }
+        }
+        
         return new Response(
           JSON.stringify({ result: parsed }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

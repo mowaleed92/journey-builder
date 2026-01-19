@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { Clock, BookOpen, ChevronRight, Play, CheckCircle } from 'lucide-react';
+import { useTranslation } from '../contexts';
 
 interface TrackCardProps {
   title: string;
@@ -24,6 +25,8 @@ export const TrackCard = memo(function TrackCard({
   onStart,
   disabled = false,
 }: TrackCardProps) {
+  const { t } = useTranslation();
+  
   const levelColors = {
     beginner: 'bg-emerald-100 text-emerald-700',
     intermediate: 'bg-amber-100 text-amber-700',
@@ -34,12 +37,12 @@ export const TrackCard = memo(function TrackCard({
   const isStarted = progress > 0 && progress < 100;
 
   const buttonLabel = disabled 
-    ? 'Track not available' 
+    ? t('track.notAvailable')
     : isCompleted 
-      ? `Review track: ${title}` 
+      ? `${t('track.review')}: ${title}` 
       : isStarted 
-        ? `Continue track: ${title}` 
-        : `Start track: ${title}`;
+        ? `${t('track.continue')}: ${title}` 
+        : `${t('track.startLearning')}: ${title}`;
 
   return (
     <article 
@@ -72,7 +75,7 @@ export const TrackCard = memo(function TrackCard({
             aria-label={`Progress: ${progress}%`}
           >
             <div
-              className="h-full bg-emerald-500 transition-all duration-300"
+              className="h-full bg-accent transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -80,13 +83,13 @@ export const TrackCard = memo(function TrackCard({
 
         <div className="absolute top-4 left-4">
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${levelColors[level]}`}>
-            {level.charAt(0).toUpperCase() + level.slice(1)}
+            {t(`track.levels.${level}`)}
           </span>
         </div>
 
         {isCompleted && (
           <div className="absolute top-4 right-4" aria-label="Completed">
-            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
               <CheckCircle className="w-5 h-5 text-white" aria-hidden="true" />
             </div>
           </div>
@@ -96,7 +99,7 @@ export const TrackCard = memo(function TrackCard({
       <div className="p-6">
         <h3 
           id={`track-title-${title.replace(/\s+/g, '-').toLowerCase()}`}
-          className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors"
+          className="text-xl font-bold text-slate-900 mb-2 group-hover:text-primary-600 transition-colors"
         >
           {title}
         </h3>
@@ -105,11 +108,11 @@ export const TrackCard = memo(function TrackCard({
         <div className="flex items-center gap-4 text-sm text-slate-500 mb-4" aria-label="Track details">
           <div className="flex items-center gap-1.5">
             <Clock className="w-4 h-4" aria-hidden="true" />
-            <span>{estimatedDuration} min</span>
+            <span>{estimatedDuration} {t('track.min')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <BookOpen className="w-4 h-4" aria-hidden="true" />
-            <span>{moduleCount} {moduleCount === 1 ? 'module' : 'modules'}</span>
+            <span>{moduleCount} {moduleCount === 1 ? t('track.module') : t('track.modules')}</span>
           </div>
         </div>
 
@@ -117,27 +120,27 @@ export const TrackCard = memo(function TrackCard({
           onClick={onStart}
           disabled={disabled}
           aria-label={buttonLabel}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
             disabled
               ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-primary-600 text-white hover:bg-primary-700'
           }`}
         >
           {disabled ? (
-            'Not Available'
+            t('track.notAvailable')
           ) : isCompleted ? (
             <>
-              Review
+              {t('track.review')}
               <ChevronRight className="w-5 h-5" aria-hidden="true" />
             </>
           ) : isStarted ? (
             <>
-              Continue
+              {t('track.continue')}
               <Play className="w-5 h-5" aria-hidden="true" />
             </>
           ) : (
             <>
-              Start Learning
+              {t('track.startLearning')}
               <Play className="w-5 h-5" aria-hidden="true" />
             </>
           )}
