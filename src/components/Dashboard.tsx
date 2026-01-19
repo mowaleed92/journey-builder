@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../hooks';
 import { TrackCard } from './TrackCard';
 import { JourneyRunner } from '../engine/JourneyRunner';
 import { sampleJourneyGraph } from '../data/sampleJourney';
-import { GraduationCap, TrendingUp, Target, Sparkles, BookOpen, Settings, RefreshCw } from 'lucide-react';
+import { TrendingUp, Target, Sparkles, BookOpen, Settings, RefreshCw } from 'lucide-react';
 import type { Track, Module, JourneyVersion, GraphDefinition } from '../types/database';
 
 interface DashboardProps {
   userId: string;
   onLogout: () => void;
   onOpenAdmin: () => void;
+  settingsKey?: number; // Used to trigger settings reload when changed
 }
 
 interface TrackWithProgress extends Track {
@@ -19,7 +22,9 @@ interface TrackWithProgress extends Track {
   graphJson?: GraphDefinition;
 }
 
-export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
+export function Dashboard({ userId, onLogout, onOpenAdmin, settingsKey }: DashboardProps) {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const [tracks, setTracks] = useState<TrackWithProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -32,11 +37,33 @@ export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
     totalInProgress: 0,
     streakDays: 0,
   });
+  const [platformName, setPlatformName] = useState('Learning Hub');
 
   useEffect(() => {
     loadTracks();
     loadStats();
   }, []);
+
+  // Load platform settings (and reload when settingsKey changes)
+  useEffect(() => {
+    loadSettings();
+  }, [settingsKey]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('setting_key, setting_value')
+        .eq('setting_key', 'platform_name')
+        .maybeSingle();
+
+      if (!error && data) {
+        setPlatformName(data.setting_value);
+      }
+    } catch (err) {
+      console.error('Error loading platform settings:', err);
+    }
+  };
 
   const loadTracks = async () => {
     setIsLoading(true);
@@ -168,9 +195,7 @@ export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
         .single();
 
       if (trackError || !track) {
-        console.error('Failed to create track:', trackError);
-        setIsSeeding(false);
-        return;
+        throw new Error(trackError?.message || 'Failed to create track');
       }
 
       const { data: module, error: moduleError } = await supabase
@@ -186,9 +211,7 @@ export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
         .single();
 
       if (moduleError || !module) {
-        console.error('Failed to create module:', moduleError);
-        setIsSeeding(false);
-        return;
+        throw new Error(moduleError?.message || 'Failed to create module');
       }
 
       const { data: journeyVersion, error: journeyError } = await supabase
@@ -203,30 +226,33 @@ export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
         .single();
 
       if (journeyError || !journeyVersion) {
-        console.error('Failed to create journey version:', journeyError);
-        setIsSeeding(false);
-        return;
+        throw new Error(journeyError?.message || 'Failed to create journey version');
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('tracks')
         .update({ published_version_id: journeyVersion.id })
         .eq('id', track.id);
 
+      if (updateError) {
+        console.error('Failed to update track with published version:', updateError);
+        // Non-critical error, track is still usable
+      }
+
+      showToast('success', 'Sample track created successfully! You can now start learning.');
       await loadTracks();
     } catch (err) {
       console.error('Seeding error:', err);
+      showToast('error', 'Failed to create sample track. Please try again.');
+    } finally {
+      setIsSeeding(false);
     }
-
-    setIsSeeding(false);
   };
 
   const handleStartJourney = (track: TrackWithProgress) => {
-    if (track.journeyVersionId && track.graphJson) {
-      setActiveJourney({
-        journeyVersionId: track.journeyVersionId,
-        graph: track.graphJson,
-      });
+    if (track.journeyVersionId) {
+      // Navigate to journey URL - enables browser back button and shareable links
+      navigate(`/journey?v=${track.journeyVersionId}`);
     }
   };
 
@@ -255,34 +281,37 @@ export function Dashboard({ userId, onLogout, onOpenAdmin }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
+      <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
+              <img
+                src="https://res.cloudinary.com/dujh5xuoi/image/upload/v1754423073/%D8%AA%D8%B9%D9%84%D9%91%D9%85_AIFinal_edvr4e.png"
+                alt="Platform logo"
+                className="max-h-10 w-auto object-contain"
+              />
               <div>
-                <h1 className="text-xl font-bold text-slate-900">Learning Hub</h1>
+                <h1 className="text-xl font-bold text-slate-900">{platformName}</h1>
                 <p className="text-sm text-slate-500">Your AI-powered learning journey</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <nav className="flex items-center gap-2" role="navigation" aria-label="User actions">
               <button
                 onClick={onOpenAdmin}
-                className="p-2 rounded-lg transition-colors text-slate-500 hover:bg-slate-100"
-                title="Admin Panel"
+                className="p-2 rounded-lg transition-colors text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                aria-label="Open Admin Panel"
               >
-                <Settings className="w-5 h-5" />
+                <Settings className="w-5 h-5" aria-hidden="true" />
               </button>
               <button
                 onClick={onLogout}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg"
+                aria-label="Sign out of your account"
               >
                 Sign Out
               </button>
-            </div>
+            </nav>
           </div>
         </div>
       </header>

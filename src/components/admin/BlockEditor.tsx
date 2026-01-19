@@ -12,8 +12,15 @@ import {
   ChevronUp,
   Loader2,
   Image,
+  AlertTriangle,
+  FileText,
+  Type,
+  Camera,
 } from 'lucide-react';
-import type { Block, Edge, ConditionGroup, QuizQuestion, FormField, MissionStep } from '../../types/database';
+import { useAIEnabled } from '../../hooks/useAIEnabled';
+import { RichTextEditor } from '../editor';
+import { VideoRecorder } from '../recording';
+import type { Block, Edge, ConditionGroup, QuizQuestion, FormField, MissionStep, ResourceItem } from '../../types/database';
 
 interface BlockEditorProps {
   block: Block;
@@ -26,6 +33,7 @@ interface BlockEditorProps {
 }
 
 export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRemoveEdge, onClose }: BlockEditorProps) {
+  const { enabled: aiEnabled, isLoading: aiSettingsLoading } = useAIEnabled();
   const [activeSection, setActiveSection] = useState<string>('content');
 
   const updateContent = (key: string, value: unknown) => {
@@ -67,7 +75,7 @@ export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRe
             isOpen={activeSection === 'content'}
             onToggle={() => setActiveSection(activeSection === 'content' ? '' : 'content')}
           >
-            {renderContentEditor(block, updateContent)}
+            {renderContentEditor(block, updateContent, aiEnabled, aiSettingsLoading)}
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -203,19 +211,21 @@ function CollapsibleSection({
 
 function renderContentEditor(
   block: Block,
-  updateContent: (key: string, value: unknown) => void
+  updateContent: (key: string, value: unknown) => void,
+  aiEnabled: boolean,
+  aiSettingsLoading: boolean
 ) {
   const content = block.content as Record<string, unknown>;
 
   switch (block.type) {
     case 'read':
-      return <ReadBlockEditor content={content} updateContent={updateContent} />;
+      return <ReadBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'video':
-      return <VideoBlockEditor content={content} updateContent={updateContent} />;
+      return <VideoBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'image':
       return <ImageBlockEditor content={content} updateContent={updateContent} />;
     case 'quiz':
-      return <QuizBlockEditor content={content} updateContent={updateContent} />;
+      return <QuizBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'mission':
       return <MissionBlockEditor content={content} updateContent={updateContent} />;
     case 'form':
@@ -226,6 +236,12 @@ function renderContentEditor(
       return <CheckpointBlockEditor content={content} updateContent={updateContent} />;
     case 'animation':
       return <AnimationBlockEditor content={content} updateContent={updateContent} />;
+    case 'code':
+      return <CodeBlockEditor content={content} updateContent={updateContent} />;
+    case 'exercise':
+      return <ExerciseBlockEditor content={content} updateContent={updateContent} />;
+    case 'resource':
+      return <ResourceBlockEditor content={content} updateContent={updateContent} />;
     default:
       return <p className="text-slate-500">No editor available for this block type.</p>;
   }
@@ -234,16 +250,21 @@ function renderContentEditor(
 function ReadBlockEditor({
   content,
   updateContent,
+  aiEnabled,
+  aiSettingsLoading,
 }: {
   content: Record<string, unknown>;
   updateContent: (key: string, value: unknown) => void;
+  aiEnabled: boolean;
+  aiSettingsLoading: boolean;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiInput, setShowAiInput] = useState(false);
+  const [editorMode, setEditorMode] = useState<'markdown' | 'richtext'>('markdown');
 
   const generateContent = async () => {
-    if (!aiPrompt.trim()) return;
+    if (!aiPrompt.trim() || !aiEnabled) return;
     setIsGenerating(true);
     try {
       const response = await fetch(
@@ -274,17 +295,102 @@ function ReadBlockEditor({
     }
   };
 
+  // Convert markdown to simple HTML for rich text editor
+  const markdownToHtml = (markdown: string): string => {
+    if (!markdown) return '';
+    let html = markdown
+      .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>')
+      .replace(/^- (.*$)/gm, '<li>$1</li>')
+      .replace(/\n/g, '<br>');
+    return html;
+  };
+
+  // Convert HTML back to markdown
+  const htmlToMarkdown = (html: string): string => {
+    if (!html) return '';
+    let markdown = html
+      .replace(/<h1>(.*?)<\/h1>/g, '# $1\n')
+      .replace(/<h2>(.*?)<\/h2>/g, '## $1\n')
+      .replace(/<h3>(.*?)<\/h3>/g, '### $1\n')
+      .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
+      .replace(/<b>(.*?)<\/b>/g, '**$1**')
+      .replace(/<em>(.*?)<\/em>/g, '*$1*')
+      .replace(/<i>(.*?)<\/i>/g, '*$1*')
+      .replace(/<code>(.*?)<\/code>/g, '`$1`')
+      .replace(/<blockquote>(.*?)<\/blockquote>/g, '> $1\n')
+      .replace(/<li>(.*?)<\/li>/g, '- $1\n')
+      .replace(/<br\s*\/?>/g, '\n')
+      .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+    return markdown.trim();
+  };
+
+  const handleRichTextChange = (html: string) => {
+    const markdown = htmlToMarkdown(html);
+    updateContent('markdown', markdown);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Editor Mode Toggle */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-slate-400">Editor Mode:</span>
+        <div className="flex bg-slate-900 rounded-lg p-1">
+          <button
+            onClick={() => setEditorMode('markdown')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+              editorMode === 'markdown'
+                ? 'bg-slate-700 text-white'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Markdown
+          </button>
+          <button
+            onClick={() => setEditorMode('richtext')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+              editorMode === 'richtext'
+                ? 'bg-slate-700 text-white'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Type className="w-4 h-4" />
+            Rich Text
+          </button>
+        </div>
+      </div>
+
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">Content (Markdown)</label>
-        <textarea
-          value={(content.markdown as string) || ''}
-          onChange={(e) => updateContent('markdown', e.target.value)}
-          rows={12}
-          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
-          placeholder="# Heading&#10;&#10;Your content here..."
-        />
+        <label className="block text-sm font-medium text-slate-300 mb-1">
+          Content ({editorMode === 'markdown' ? 'Markdown' : 'Rich Text'})
+        </label>
+        {editorMode === 'markdown' ? (
+          <textarea
+            value={(content.markdown as string) || ''}
+            onChange={(e) => updateContent('markdown', e.target.value)}
+            rows={12}
+            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
+            placeholder="# Heading&#10;&#10;Your content here..."
+          />
+        ) : (
+          <RichTextEditor
+            value={markdownToHtml((content.markdown as string) || '')}
+            onChange={handleRichTextChange}
+            direction="ltr"
+            placeholder="Start writing your content..."
+            className="min-h-[300px]"
+          />
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Est. Read Time (minutes)</label>
@@ -296,7 +402,12 @@ function ReadBlockEditor({
           className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      {showAiInput ? (
+      {!aiEnabled && !aiSettingsLoading ? (
+        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span>AI content generation is disabled by the administrator.</span>
+        </div>
+      ) : showAiInput ? (
         <div className="space-y-2">
           <input
             type="text"
@@ -325,7 +436,8 @@ function ReadBlockEditor({
       ) : (
         <button
           onClick={() => setShowAiInput(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-colors"
+          disabled={aiSettingsLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 transition-colors"
         >
           <Sparkles className="w-4 h-4" />
           Generate Content with AI
@@ -338,17 +450,22 @@ function ReadBlockEditor({
 function VideoBlockEditor({
   content,
   updateContent,
+  aiEnabled,
+  aiSettingsLoading,
 }: {
   content: Record<string, unknown>;
   updateContent: (key: string, value: unknown) => void;
+  aiEnabled: boolean;
+  aiSettingsLoading: boolean;
 }) {
-  const [inputMode, setInputMode] = useState<'url' | 'upload'>('url');
+  const [inputMode, setInputMode] = useState<'url' | 'upload' | 'record'>('url');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiInput, setShowAiInput] = useState(false);
+  const [showRecorder, setShowRecorder] = useState(false);
 
   const generateScript = async () => {
-    if (!aiPrompt.trim()) return;
+    if (!aiPrompt.trim() || !aiEnabled) return;
     setIsGenerating(true);
     try {
       const response = await fetch(
@@ -380,6 +497,35 @@ function VideoBlockEditor({
     }
   };
 
+  const handleRecordingComplete = async (blob: Blob, mode: string) => {
+    // Create a temporary URL for the recorded video
+    // In production, this would upload to Supabase Storage
+    const url = URL.createObjectURL(blob);
+    updateContent('url', url);
+    updateContent('recordingMode', mode);
+    setShowRecorder(false);
+    setInputMode('url');
+  };
+
+  // Show video recorder modal
+  if (showRecorder) {
+    return (
+      <div className="space-y-4">
+        <VideoRecorder
+          onRecordingComplete={handleRecordingComplete}
+          onClose={() => {
+            setShowRecorder(false);
+            setInputMode('url');
+          }}
+          showLibrarySave={true}
+        />
+        <p className="text-xs text-slate-400 text-center">
+          Note: In production, videos will be uploaded to Taalam storage.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
@@ -405,6 +551,20 @@ function VideoBlockEditor({
           <Upload className="w-4 h-4" />
           Upload
         </button>
+        <button
+          onClick={() => {
+            setInputMode('record');
+            setShowRecorder(true);
+          }}
+          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+            inputMode === 'record'
+              ? 'bg-red-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          <Camera className="w-4 h-4" />
+          Record
+        </button>
       </div>
 
       {inputMode === 'url' ? (
@@ -419,7 +579,7 @@ function VideoBlockEditor({
           />
           <p className="text-xs text-slate-500 mt-1">Supports YouTube, Vimeo, and direct video URLs</p>
         </div>
-      ) : (
+      ) : inputMode === 'upload' ? (
         <div className="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center">
           <Video className="w-10 h-10 text-slate-600 mx-auto mb-2" />
           <p className="text-sm text-slate-400 mb-2">Drag and drop or click to upload</p>
@@ -428,7 +588,7 @@ function VideoBlockEditor({
             Choose File
           </button>
         </div>
-      )}
+      ) : null}
 
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Transcript / Script</label>
@@ -441,7 +601,12 @@ function VideoBlockEditor({
         />
       </div>
 
-      {showAiInput ? (
+      {!aiEnabled && !aiSettingsLoading ? (
+        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span>AI script generation is disabled by the administrator.</span>
+        </div>
+      ) : showAiInput ? (
         <div className="space-y-2">
           <input
             type="text"
@@ -470,7 +635,8 @@ function VideoBlockEditor({
       ) : (
         <button
           onClick={() => setShowAiInput(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-colors"
+          disabled={aiSettingsLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 transition-colors"
         >
           <Sparkles className="w-4 h-4" />
           Generate Script with AI
@@ -572,9 +738,13 @@ function ImageBlockEditor({
 function QuizBlockEditor({
   content,
   updateContent,
+  aiEnabled,
+  aiSettingsLoading,
 }: {
   content: Record<string, unknown>;
   updateContent: (key: string, value: unknown) => void;
+  aiEnabled: boolean;
+  aiSettingsLoading: boolean;
 }) {
   const questions = (content.questions as QuizQuestion[]) || [];
   const [isGenerating, setIsGenerating] = useState(false);
@@ -602,7 +772,7 @@ function QuizBlockEditor({
   };
 
   const generateQuestions = async () => {
-    if (!aiPrompt.trim()) return;
+    if (!aiPrompt.trim() || !aiEnabled) return;
     setIsGenerating(true);
     try {
       const response = await fetch(
@@ -727,7 +897,12 @@ function QuizBlockEditor({
         Add Question
       </button>
 
-      {showAiInput ? (
+      {!aiEnabled && !aiSettingsLoading ? (
+        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span>AI question generation is disabled by the administrator.</span>
+        </div>
+      ) : showAiInput ? (
         <div className="space-y-2">
           <input
             type="text"
@@ -756,7 +931,8 @@ function QuizBlockEditor({
       ) : (
         <button
           onClick={() => setShowAiInput(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-colors"
+          disabled={aiSettingsLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 transition-colors"
         >
           <Sparkles className="w-4 h-4" />
           Generate Questions with AI
@@ -774,6 +950,7 @@ function MissionBlockEditor({
   updateContent: (key: string, value: unknown) => void;
 }) {
   const steps = (content.steps as MissionStep[]) || [];
+  const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
   const addStep = () => {
     const newStep: MissionStep = {
@@ -817,26 +994,78 @@ function MissionBlockEditor({
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <label className="block text-sm font-medium text-slate-300">Steps</label>
         {steps.map((step, index) => (
-          <div key={step.id} className="flex items-start gap-2 p-2 bg-slate-900 rounded-lg">
-            <span className="w-6 h-6 rounded bg-slate-700 flex items-center justify-center text-xs text-slate-400">
-              {index + 1}
-            </span>
-            <input
-              type="text"
-              value={step.instruction}
-              onChange={(e) => updateStep(index, { instruction: e.target.value })}
-              className="flex-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Step instruction..."
-            />
-            <button
-              onClick={() => removeStep(index)}
-              className="p-1 text-slate-500 hover:text-red-400"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+          <div key={step.id} className="p-3 bg-slate-900 rounded-lg space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="w-6 h-6 rounded bg-slate-700 flex items-center justify-center text-xs text-slate-400 mt-1">
+                {index + 1}
+              </span>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  value={step.instruction}
+                  onChange={(e) => updateStep(index, { instruction: e.target.value })}
+                  className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Step instruction / question..."
+                />
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={step.verificationMethod || 'self_report'}
+                    onChange={(e) => updateStep(index, { verificationMethod: e.target.value as MissionStep['verificationMethod'] })}
+                    className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="self_report">Self Report</option>
+                    <option value="screenshot">Screenshot</option>
+                    <option value="url_check">URL Check</option>
+                    <option value="ai_validate">AI Validation</option>
+                  </select>
+
+                  {step.verificationMethod === 'ai_validate' && (
+                    <button
+                      onClick={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
+                      className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors"
+                    >
+                      {expandedStep === step.id ? 'Hide Options' : 'AI Options'}
+                    </button>
+                  )}
+                </div>
+
+                {step.verificationMethod === 'ai_validate' && expandedStep === step.id && (
+                  <div className="space-y-2 p-2 bg-slate-800 rounded border border-slate-700">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Expected Criteria</label>
+                      <textarea
+                        value={step.expectedCriteria || ''}
+                        onChange={(e) => updateStep(index, { expectedCriteria: e.target.value })}
+                        rows={2}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        placeholder="Describe what makes a correct answer (e.g., 'Must mention key concept X and demonstrate understanding of Y')"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Input Type</label>
+                      <select
+                        value={step.inputType || 'text'}
+                        onChange={(e) => updateStep(index, { inputType: e.target.value as 'text' | 'textarea' })}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="text">Single Line (short answer)</option>
+                        <option value="textarea">Multi Line (long answer)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => removeStep(index)}
+                className="p-1 text-slate-500 hover:text-red-400"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -848,6 +1077,12 @@ function MissionBlockEditor({
         <Plus className="w-4 h-4" />
         Add Step
       </button>
+
+      <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+        <p className="text-xs text-blue-300">
+          <strong>AI Validation:</strong> When selected, learners must provide an answer that will be evaluated by AI against your criteria. The AI will provide feedback and mark the step as complete if correct.
+        </p>
+      </div>
     </div>
   );
 }
@@ -1072,6 +1307,293 @@ function AnimationBlockEditor({
           Loop
         </label>
       </div>
+    </div>
+  );
+}
+
+const CODE_LANGUAGES = [
+  'javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'c', 
+  'ruby', 'go', 'rust', 'php', 'swift', 'kotlin', 'sql', 'html', 'css', 
+  'json', 'bash', 'shell', 'markdown', 'yaml', 'xml'
+];
+
+function CodeBlockEditor({
+  content,
+  updateContent,
+}: {
+  content: Record<string, unknown>;
+  updateContent: (key: string, value: unknown) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Language</label>
+        <select
+          value={(content.language as string) || 'javascript'}
+          onChange={(e) => updateContent('language', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {CODE_LANGUAGES.map((lang) => (
+            <option key={lang} value={lang}>
+              {lang.charAt(0).toUpperCase() + lang.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Code</label>
+        <textarea
+          value={(content.code as string) || ''}
+          onChange={(e) => updateContent('code', e.target.value)}
+          rows={12}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
+          placeholder="// Your code here..."
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Description (optional)</label>
+        <input
+          type="text"
+          value={(content.description as string) || ''}
+          onChange={(e) => updateContent('description', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Brief description of the code..."
+        />
+      </div>
+
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={(content.showLineNumbers as boolean) ?? true}
+            onChange={(e) => updateContent('showLineNumbers', e.target.checked)}
+          />
+          Show Line Numbers
+        </label>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Highlight Lines (comma-separated)</label>
+        <input
+          type="text"
+          value={((content.highlightLines as number[]) || []).join(', ')}
+          onChange={(e) => {
+            const lines = e.target.value
+              .split(',')
+              .map((s) => parseInt(s.trim()))
+              .filter((n) => !isNaN(n) && n > 0);
+            updateContent('highlightLines', lines);
+          }}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="e.g., 1, 3, 5-7"
+        />
+        <p className="text-xs text-slate-500 mt-1">Lines to highlight (e.g., 1, 3, 5)</p>
+      </div>
+    </div>
+  );
+}
+
+function ExerciseBlockEditor({
+  content,
+  updateContent,
+}: {
+  content: Record<string, unknown>;
+  updateContent: (key: string, value: unknown) => void;
+}) {
+  const hints = (content.hints as string[]) || [];
+
+  const addHint = () => {
+    updateContent('hints', [...hints, '']);
+  };
+
+  const updateHint = (index: number, value: string) => {
+    const updated = hints.map((h, i) => (i === index ? value : h));
+    updateContent('hints', updated);
+  };
+
+  const removeHint = (index: number) => {
+    updateContent('hints', hints.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
+        <input
+          type="text"
+          value={(content.description as string) || ''}
+          onChange={(e) => updateContent('description', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Brief description..."
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Problem</label>
+        <textarea
+          value={(content.problem as string) || ''}
+          onChange={(e) => updateContent('problem', e.target.value)}
+          rows={4}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="Describe the problem or exercise..."
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Hints (optional)</label>
+        <div className="space-y-2">
+          {hints.map((hint, index) => (
+            <div key={index} className="flex items-start gap-2">
+              <span className="w-6 h-6 rounded bg-slate-700 flex items-center justify-center text-xs text-slate-400 mt-1">
+                {index + 1}
+              </span>
+              <input
+                type="text"
+                value={hint}
+                onChange={(e) => updateHint(index, e.target.value)}
+                className="flex-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Hint..."
+              />
+              <button
+                onClick={() => removeHint(index)}
+                className="p-1 text-slate-500 hover:text-red-400"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addHint}
+          className="mt-2 flex items-center gap-2 px-3 py-1 bg-slate-700 text-white text-sm rounded hover:bg-slate-600 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Hint
+        </button>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Solution</label>
+        <textarea
+          value={(content.solution as string) || ''}
+          onChange={(e) => updateContent('solution', e.target.value)}
+          rows={6}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
+          placeholder="The solution..."
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Solution Explanation (optional)</label>
+        <textarea
+          value={(content.solutionExplanation as string) || ''}
+          onChange={(e) => updateContent('solutionExplanation', e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="Explain why this solution works..."
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResourceBlockEditor({
+  content,
+  updateContent,
+}: {
+  content: Record<string, unknown>;
+  updateContent: (key: string, value: unknown) => void;
+}) {
+  const resources = (content.resources as ResourceItem[]) || [];
+
+  const addResource = () => {
+    const newResource: ResourceItem = {
+      id: `res_${Date.now()}`,
+      title: '',
+      url: '',
+      type: 'link',
+    };
+    updateContent('resources', [...resources, newResource]);
+  };
+
+  const updateResource = (index: number, updates: Partial<ResourceItem>) => {
+    const updated = resources.map((r, i) => (i === index ? { ...r, ...updates } : r));
+    updateContent('resources', updated);
+  };
+
+  const removeResource = (index: number) => {
+    updateContent('resources', resources.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
+        <input
+          type="text"
+          value={(content.description as string) || ''}
+          onChange={(e) => updateContent('description', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Brief description of resources..."
+        />
+      </div>
+
+      <div className="space-y-3">
+        <label className="block text-sm font-medium text-slate-300">Resources</label>
+        {resources.map((resource, index) => (
+          <div key={resource.id} className="p-3 bg-slate-900 rounded-lg space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={resource.title}
+                onChange={(e) => updateResource(index, { title: e.target.value })}
+                className="flex-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Resource title..."
+              />
+              <select
+                value={resource.type}
+                onChange={(e) => updateResource(index, { type: e.target.value as ResourceItem['type'] })}
+                className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="link">Link</option>
+                <option value="download">Download</option>
+                <option value="video">Video</option>
+                <option value="document">Document</option>
+              </select>
+              <button
+                onClick={() => removeResource(index)}
+                className="p-1 text-slate-500 hover:text-red-400"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="url"
+              value={resource.url}
+              onChange={(e) => updateResource(index, { url: e.target.value })}
+              className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://..."
+            />
+            <input
+              type="text"
+              value={resource.description || ''}
+              onChange={(e) => updateResource(index, { description: e.target.value })}
+              className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Description (optional)..."
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={addResource}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+      >
+        <Plus className="w-4 h-4" />
+        Add Resource
+      </button>
     </div>
   );
 }

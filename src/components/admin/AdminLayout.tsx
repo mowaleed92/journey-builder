@@ -1,12 +1,12 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   BookOpen,
   Layers,
   Settings,
   ChevronLeft,
-  Sparkles,
-  GraduationCap
+  Sparkles
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -18,14 +18,35 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children, activeTab, onTabChange, onExit }: AdminLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tracks', label: 'Tracks', icon: BookOpen },
-    { id: 'builder', label: 'Journey Builder', icon: Layers },
-    { id: 'ai-studio', label: 'AI Studio', icon: Sparkles },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+    { id: 'tracks', label: 'Tracks', icon: BookOpen, path: '/admin/tracks' },
+    { id: 'builder', label: 'Journey Builder', icon: Layers, path: '/admin/builder' },
+    { id: 'ai-studio', label: 'AI Studio', icon: Sparkles, path: '/admin/ai-studio' },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/admin/settings' },
   ];
+
+  const handleNavClick = (item: typeof navItems[0]) => {
+    // Update URL
+    navigate(item.path);
+    // Also notify parent for state sync
+    onTabChange(item.id);
+  };
+
+  // Determine active tab from URL
+  const getActiveFromPath = () => {
+    const path = location.pathname;
+    if (path.startsWith('/admin/builder')) return 'builder';
+    if (path.startsWith('/admin/tracks')) return 'tracks';
+    if (path.startsWith('/admin/ai-studio')) return 'ai-studio';
+    if (path.startsWith('/admin/settings')) return 'settings';
+    return 'dashboard';
+  };
+
+  const currentActive = getActiveFromPath();
 
   return (
     <div className="min-h-screen bg-slate-900 flex">
@@ -37,9 +58,11 @@ export function AdminLayout({ children, activeTab, onTabChange, onExit }: AdminL
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src="https://res.cloudinary.com/dujh5xuoi/image/upload/v1754423073/%D8%AA%D8%B9%D9%84%D9%91%D9%85_AIFinal_edvr4e.png"
+                alt="Platform logo"
+                className="max-h-8 w-auto object-contain"
+              />
               <span className="font-bold text-white">Admin</span>
             </div>
           )}
@@ -51,21 +74,23 @@ export function AdminLayout({ children, activeTab, onTabChange, onExit }: AdminL
           </button>
         </div>
 
-        <nav className="flex-1 p-2 space-y-1">
+        <nav className="flex-1 p-2 space-y-1" role="navigation" aria-label="Admin navigation">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = currentActive === item.id || activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => onTabChange(item.id)}
+                onClick={() => handleNavClick(item)}
+                aria-label={item.label}
+                aria-current={isActive ? 'page' : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                   isActive
                     ? 'bg-blue-600 text-white'
                     : 'text-slate-400 hover:bg-slate-700 hover:text-white'
                 }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 {!sidebarCollapsed && <span className="font-medium">{item.label}</span>}
               </button>
             );

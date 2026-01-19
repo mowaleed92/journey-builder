@@ -28,6 +28,20 @@ interface RequestBody {
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
+// Helper function to determine the correct token parameter based on model
+function getTokenParam(model: string, tokens: number): Record<string, number> {
+  // Models that require max_completion_tokens (newer models)
+  const useCompletionTokens = 
+    model.startsWith('gpt-5') || 
+    model.startsWith('gpt-4o') ||
+    model.includes('o1') ||
+    model.includes('o3');
+  
+  return useCompletionTokens 
+    ? { max_completion_tokens: tokens }
+    : { max_tokens: tokens };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -108,7 +122,7 @@ Be supportive but maintain educational rigor. Keep responses focused.`;
       body: JSON.stringify({
         model: model,
         messages: openaiMessages,
-        max_tokens: 800,
+        ...getTokenParam(model, 800),
         temperature: 0.7,
       }),
     });

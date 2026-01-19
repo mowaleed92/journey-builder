@@ -1,11 +1,30 @@
 import { useState } from 'react';
-import { Target, ExternalLink, CheckCircle, Circle, ChevronRight, Upload } from 'lucide-react';
+import { Target, ExternalLink, CheckCircle, Circle, ChevronRight, Upload, Loader2, XCircle, RotateCcw, Send } from 'lucide-react';
 import type { MissionBlockContent, MissionStep } from '../../types/database';
 
 interface MissionBlockProps {
   content: MissionBlockContent;
-  onComplete: (data: { completedSteps: string[] }) => void;
-  previousOutput?: { completedSteps: string[] };
+  onComplete: (data: MissionOutputData) => void;
+  previousOutput?: MissionOutputData;
+}
+
+interface MissionOutputData {
+  completedSteps: string[];
+  validationHistory?: Record<string, ValidationAttempt[]>;
+}
+
+interface ValidationAttempt {
+  answer: string;
+  correct: boolean;
+  feedback: string;
+  score: number;
+  timestamp: string;
+}
+
+interface ValidationResult {
+  correct: boolean;
+  feedback: string;
+  score: number;
 }
 
 export function MissionBlock({ content, onComplete, previousOutput }: MissionBlockProps) {
@@ -13,6 +32,12 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
     new Set(previousOutput?.completedSteps || [])
   );
   const [screenshotUploaded, setScreenshotUploaded] = useState(false);
+  const [stepInputs, setStepInputs] = useState<Record<string, string>>({});
+  const [validating, setValidating] = useState<string | null>(null);
+  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult | null>>({});
+  const [validationHistory, setValidationHistory] = useState<Record<string, ValidationAttempt[]>>(
+    previousOutput?.validationHistory || {}
+  );
 
   const allStepsCompleted = content.steps.every((step) => completedSteps.has(step.id));
 
@@ -27,11 +52,211 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
   };
 
   const handleComplete = () => {
-    onComplete({ completedSteps: Array.from(completedSteps) });
+    onComplete({ 
+      completedSteps: Array.from(completedSteps),
+      validationHistory
+    });
+  };
+
+  const handleInputChange = (stepId: string, value: string) => {
+    setStepInputs((prev) => ({ ...prev, [stepId]: value }));
+    // Clear any previous validation result when user types
+    setValidationResults((prev) => ({ ...prev, [stepId]: null }));
+  };
+
+  const handleAIValidation = async (step: MissionStep) => {
+    const userAnswer = stepInputs[step.id]?.trim();
+    if (!userAnswer) return;
+
+    setValidating(step.id);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mission-validate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            question: step.instruction,
+            userAnswer,
+            expectedCriteria: step.expectedCriteria || 'The answer should demonstrate understanding of the concept.',
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Validation failed');
+      }
+
+      const result: ValidationResult = await response.json();
+
+      // Store validation result
+      setValidationResults((prev) => ({ ...prev, [step.id]: result }));
+
+      // Add to history
+      const attempt: ValidationAttempt = {
+        answer: userAnswer,
+        correct: result.correct,
+        feedback: result.feedback,
+        score: result.score,
+        timestamp: new Date().toISOString(),
+      };
+
+      setValidationHistory((prev) => ({
+        ...prev,
+        [step.id]: [...(prev[step.id] || []), attempt],
+      }));
+
+      // If correct, mark step as completed
+      if (result.correct) {
+        setCompletedSteps((prev) => new Set([...prev, step.id]));
+      }
+    } catch (error) {
+      console.error('AI validation error:', error);
+      setValidationResults((prev) => ({
+        ...prev,
+        [step.id]: {
+          correct: false,
+          feedback: 'Unable to validate your answer. Please try again.',
+          score: 0,
+        },
+      }));
+    } finally {
+      setValidating(null);
+    }
+  };
+
+  const handleRetry = (stepId: string) => {
+    setValidationResults((prev) => ({ ...prev, [stepId]: null }));
+    setStepInputs((prev) => ({ ...prev, [stepId]: '' }));
+    setCompletedSteps((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(stepId);
+      return newSet;
+    });
   };
 
   const renderVerificationUI = (step: MissionStep) => {
+    const isCompleted = completedSteps.has(step.id);
+    const isValidating = validating === step.id;
+    const result = validationResults[step.id];
+    const attempts = validationHistory[step.id]?.length || 0;
+
     switch (step.verificationMethod) {
+      case 'ai_validate':
+        return (
+          <div className="mt-3 space-y-3">
+            {/* Input field */}
+            {!isCompleted && (
+              <>
+                {step.inputType === 'textarea' ? (
+                  <textarea
+                    value={stepInputs[step.id] || ''}
+                    onChange={(e) => handleInputChange(step.id, e.target.value)}
+                    placeholder="Type your answer here..."
+                    rows={4}
+                    disabled={isValidating}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={stepInputs[step.id] || ''}
+                    onChange={(e) => handleInputChange(step.id, e.target.value)}
+                    placeholder="Type your answer here..."
+                    disabled={isValidating}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                )}
+
+                <button
+                  onClick={() => handleAIValidation(step)}
+                  disabled={isValidating || !stepInputs[step.id]?.trim()}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Submit Answer
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
+            {/* Validation result */}
+            {result && (
+              <div
+                className={`p-4 rounded-lg ${
+                  result.correct
+                    ? 'bg-emerald-50 border border-emerald-200'
+                    : 'bg-red-50 border border-red-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {result.correct ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className={`font-medium ${
+                          result.correct ? 'text-emerald-800' : 'text-red-800'
+                        }`}
+                      >
+                        {result.correct ? 'Correct!' : 'Not quite right'}
+                      </span>
+                      <span
+                        className={`text-sm px-2 py-0.5 rounded ${
+                          result.correct
+                            ? 'bg-emerald-200 text-emerald-800'
+                            : 'bg-red-200 text-red-800'
+                        }`}
+                      >
+                        Score: {result.score}%
+                      </span>
+                    </div>
+                    <p
+                      className={`text-sm ${
+                        result.correct ? 'text-emerald-700' : 'text-red-700'
+                      }`}
+                    >
+                      {result.feedback}
+                    </p>
+
+                    {!result.correct && (
+                      <button
+                        onClick={() => handleRetry(step.id)}
+                        className="mt-3 flex items-center gap-1 text-sm text-red-600 hover:text-red-800 font-medium"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Try Again
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Attempt counter */}
+            {attempts > 0 && (
+              <div className="text-xs text-slate-500">
+                {attempts} attempt{attempts !== 1 ? 's' : ''} made
+              </div>
+            )}
+          </div>
+        );
+
       case 'screenshot':
         return (
           <div className="mt-2">
@@ -50,6 +275,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
             </label>
           </div>
         );
+
       case 'url_check':
         return (
           <div className="mt-2">
@@ -65,6 +291,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
             />
           </div>
         );
+
       default:
         return null;
     }
@@ -133,9 +360,12 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                           toggleStep(step.id);
                         }
                       }}
+                      disabled={step.verificationMethod === 'ai_validate'}
                       className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
                         isCompleted
                           ? 'border-emerald-500 bg-emerald-500'
+                          : step.verificationMethod === 'ai_validate'
+                          ? 'border-slate-200 bg-slate-50 cursor-default'
                           : 'border-slate-300 hover:border-slate-400'
                       }`}
                     >
@@ -151,6 +381,11 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                         <span className="text-sm font-medium text-slate-500">
                           Step {index + 1}
                         </span>
+                        {step.verificationMethod === 'ai_validate' && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                            AI Validated
+                          </span>
+                        )}
                       </div>
                       <p
                         className={`font-medium mt-1 ${

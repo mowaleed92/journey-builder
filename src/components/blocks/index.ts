@@ -7,3 +7,6 @@ export { FormBlock } from './FormBlock';
 export { AIHelpBlock } from './AIHelpBlock';
 export { CheckpointBlock } from './CheckpointBlock';
 export { AnimationBlock } from './AnimationBlock';
+export { CodeBlock } from './CodeBlock';
+export { ExerciseBlock } from './ExerciseBlock';
+export { ResourceBlock } from './ResourceBlock';

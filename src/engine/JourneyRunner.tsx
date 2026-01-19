@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../hooks';
 import { findNextBlock, buildFactsFromBlockState } from './conditions';
+import { RTLProvider } from '../contexts/RTLContext';
 import {
   ReadBlock,
   VideoBlock,
@@ -11,6 +13,9 @@ import {
   AIHelpBlock,
   CheckpointBlock,
   AnimationBlock,
+  CodeBlock,
+  ExerciseBlock,
+  ResourceBlock,
   type QuizResult,
 } from '../components/blocks';
 import type {
@@ -21,14 +26,18 @@ import type {
   Facts,
   ReadBlockContent,
   VideoBlockContent,
+  ImageBlockContent,
   QuizBlockContent,
   MissionBlockContent,
   FormBlockContent,
   AIHelpBlockContent,
   CheckpointBlockContent,
   AnimationBlockContent,
+  CodeBlockContent,
+  ExerciseBlockContent,
+  ResourceBlockContent,
 } from '../types/database';
-import { ChevronLeft, Loader2, Trophy, RotateCcw, Home, Star, Sparkles, Clock, Target } from 'lucide-react';
+import { ChevronLeft, Loader2, Trophy, RotateCcw, Home, Star, Sparkles, Clock, Target, AlertCircle } from 'lucide-react';
 
 interface JourneyRunnerProps {
   journeyVersionId: string;
@@ -36,6 +45,9 @@ interface JourneyRunnerProps {
   graph: GraphDefinition;
   onComplete: () => void;
   onExit: () => void;
+  // Optional: can be passed directly if already loaded
+  trackDirection?: 'rtl' | 'ltr';
+  trackLanguage?: string;
 }
 
 interface QuizContext {
@@ -48,24 +60,21 @@ interface QuizContext {
   weakTopics?: string[];
 }
 
-interface ImageBlockContent {
-  title: string;
-  url: string;
-  caption?: string;
-  alt?: string;
-}
-
 export function JourneyRunner({
   journeyVersionId,
   userId,
   graph,
   onComplete,
   onExit,
+  trackDirection: initialDirection,
+  trackLanguage: initialLanguage,
 }: JourneyRunnerProps) {
+  const { showToast } = useToast();
   const [run, setRun] = useState<UserJourneyRun | null>(null);
   const [currentBlock, setCurrentBlock] = useState<Block | null>(null);
   const [blockState, setBlockState] = useState<UserBlockState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const [blockStates, setBlockStates] = useState<Map<string, UserBlockState>>(new Map());
   const [quizContext, setQuizContext] = useState<QuizContext>({});
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
@@ -74,67 +83,132 @@ export function JourneyRunner({
     blocksCompleted: number;
     averageScore: number;
   } | null>(null);
+  const [direction, setDirection] = useState<'rtl' | 'ltr'>(initialDirection || 'ltr');
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>(initialLanguage || 'en');
+  const [trackId, setTrackId] = useState<string | undefined>();
+  const [moduleId, setModuleId] = useState<string | undefined>();
   const blockStartTime = useRef<number>(Date.now());
 
   useEffect(() => {
     initializeRun();
+    loadTrackSettings();
   }, []);
+
+  const loadTrackSettings = async () => {
+    try {
+      // Get the track associated with this journey version
+      const { data: journeyVersion } = await supabase
+        .from('journey_versions')
+        .select('module_id')
+        .eq('id', journeyVersionId)
+        .single();
+
+      if (!journeyVersion) return;
+
+      // Store module ID for glossary
+      setModuleId(journeyVersion.module_id);
+
+      const { data: module } = await supabase
+        .from('modules')
+        .select('track_id')
+        .eq('id', journeyVersion.module_id)
+        .single();
+
+      if (!module) return;
+
+      // Store track ID for glossary
+      setTrackId(module.track_id);
+
+      // If direction was passed in, skip loading track settings
+      if (initialDirection) return;
+
+      const { data: track } = await supabase
+        .from('tracks')
+        .select('direction, primary_language')
+        .eq('id', module.track_id)
+        .single();
+
+      if (track) {
+        setDirection(track.direction || 'ltr');
+        setPrimaryLanguage(track.primary_language || 'en');
+      }
+    } catch (error) {
+      console.error('Error loading track settings:', error);
+    }
+  };
 
   const initializeRun = async () => {
     setIsLoading(true);
+    setInitError(null);
 
-    const { data: existingRun } = await supabase
-      .from('user_journey_runs')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('journey_version_id', journeyVersionId)
-      .neq('status', 'completed')
-      .neq('status', 'abandoned')
-      .maybeSingle();
-
-    let journeyRun = existingRun;
-
-    if (!journeyRun) {
-      const { data: newRun, error } = await supabase
+    try {
+      const { data: existingRun, error: fetchError } = await supabase
         .from('user_journey_runs')
-        .insert({
-          user_id: userId,
-          journey_version_id: journeyVersionId,
-          current_block_id: graph.startBlockId,
-          status: 'in_progress',
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('user_id', userId)
+        .eq('journey_version_id', journeyVersionId)
+        .neq('status', 'completed')
+        .neq('status', 'abandoned')
+        .maybeSingle();
 
-      if (error) {
-        console.error('Failed to create journey run:', error);
-        setIsLoading(false);
-        return;
+      if (fetchError) {
+        console.error('Failed to fetch existing run:', fetchError);
+        throw new Error('Failed to load your progress. Please try again.');
       }
 
-      journeyRun = newRun;
+      let journeyRun = existingRun;
+
+      if (!journeyRun) {
+        const { data: newRun, error } = await supabase
+          .from('user_journey_runs')
+          .insert({
+            user_id: userId,
+            journey_version_id: journeyVersionId,
+            current_block_id: graph.startBlockId,
+            status: 'in_progress',
+            started_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Failed to create journey run:', error);
+          throw new Error('Failed to start your journey. Please try again.');
+        }
+
+        journeyRun = newRun;
+      }
+
+      setRun(journeyRun);
+
+      const { data: existingBlockStates, error: statesError } = await supabase
+        .from('user_block_states')
+        .select('*')
+        .eq('run_id', journeyRun.id);
+
+      if (statesError) {
+        console.error('Failed to load block states:', statesError);
+        // Non-critical error, continue without existing states
+      }
+
+      if (existingBlockStates) {
+        const statesMap = new Map<string, UserBlockState>();
+        existingBlockStates.forEach((state) => {
+          statesMap.set(state.block_id, state);
+        });
+        setBlockStates(statesMap);
+      }
+
+      const startBlockId = journeyRun.current_block_id || graph.startBlockId;
+      await navigateToBlock(startBlockId, journeyRun.id);
+    } catch (error) {
+      console.error('Journey initialization error:', error);
+      const message = error instanceof Error ? error.message : 'Failed to initialize journey';
+      setInitError(message);
+      showToast('error', message);
+    } finally {
+      setIsLoading(false);
     }
-
-    setRun(journeyRun);
-
-    const { data: existingBlockStates } = await supabase
-      .from('user_block_states')
-      .select('*')
-      .eq('run_id', journeyRun.id);
-
-    if (existingBlockStates) {
-      const statesMap = new Map<string, UserBlockState>();
-      existingBlockStates.forEach((state) => {
-        statesMap.set(state.block_id, state);
-      });
-      setBlockStates(statesMap);
-    }
-
-    const startBlockId = journeyRun.current_block_id || graph.startBlockId;
-    await navigateToBlock(startBlockId, journeyRun.id);
-
-    setIsLoading(false);
   };
 
   const navigateToBlock = async (blockId: string, runId: string) => {
@@ -303,24 +377,40 @@ export function JourneyRunner({
   const handleRestartJourney = async () => {
     if (!run) return;
 
-    await supabase
-      .from('user_block_states')
-      .delete()
-      .eq('run_id', run.id);
+    try {
+      const { error: deleteError } = await supabase
+        .from('user_block_states')
+        .delete()
+        .eq('run_id', run.id);
 
-    await supabase
-      .from('user_journey_runs')
-      .update({
-        status: 'in_progress',
-        current_block_id: graph.startBlockId,
-        completed_at: null,
-      })
-      .eq('id', run.id);
+      if (deleteError) {
+        console.error('Failed to clear block states:', deleteError);
+        throw new Error('Failed to reset progress');
+      }
 
-    setBlockStates(new Map());
-    setShowCompletionScreen(false);
-    setCompletionStats(null);
-    await navigateToBlock(graph.startBlockId, run.id);
+      const { error: updateError } = await supabase
+        .from('user_journey_runs')
+        .update({
+          status: 'in_progress',
+          current_block_id: graph.startBlockId,
+          completed_at: null,
+        })
+        .eq('id', run.id);
+
+      if (updateError) {
+        console.error('Failed to reset journey run:', updateError);
+        throw new Error('Failed to restart journey');
+      }
+
+      setBlockStates(new Map());
+      setShowCompletionScreen(false);
+      setCompletionStats(null);
+      showToast('success', 'Journey restarted! Good luck!');
+      await navigateToBlock(graph.startBlockId, run.id);
+    } catch (error) {
+      console.error('Restart journey error:', error);
+      showToast('error', 'Failed to restart journey. Please try again.');
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -344,6 +434,8 @@ export function JourneyRunner({
             content={currentBlock.content as ReadBlockContent}
             onComplete={() => completeBlock()}
             isCompleted={isCompleted}
+            trackId={trackId}
+            moduleId={moduleId}
           />
         );
 
@@ -435,6 +527,33 @@ export function JourneyRunner({
           />
         );
 
+      case 'code':
+        return (
+          <CodeBlock
+            content={currentBlock.content as CodeBlockContent}
+            onComplete={() => completeBlock()}
+            isCompleted={isCompleted}
+          />
+        );
+
+      case 'exercise':
+        return (
+          <ExerciseBlock
+            content={currentBlock.content as ExerciseBlockContent}
+            onComplete={(data) => completeBlock(data)}
+            previousOutput={blockState.output_json as { userSolution: string; hintsViewed: number; solutionViewed: boolean } | undefined}
+          />
+        );
+
+      case 'resource':
+        return (
+          <ResourceBlock
+            content={currentBlock.content as ResourceBlockContent}
+            onComplete={(data) => completeBlock(data)}
+            previousOutput={blockState.output_json as { viewedResources: string[] } | undefined}
+          />
+        );
+
       default:
         return (
           <div className="flex items-center justify-center h-full">
@@ -450,6 +569,36 @@ export function JourneyRunner({
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-slate-600">Loading your journey...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-100">
+        <div className="text-center max-w-md px-4">
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Unable to Load Journey</h2>
+          <p className="text-slate-600 mb-6">{initError}</p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => initializeRun()}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+            >
+              <RotateCcw className="w-5 h-5" />
+              Try Again
+            </button>
+            <button
+              onClick={onExit}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-300 transition-colors"
+            >
+              <Home className="w-5 h-5" />
+              Back to Dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -530,31 +679,35 @@ export function JourneyRunner({
   ).length;
   const progress = (completedCount / graph.blocks.length) * 100;
 
+  const isRTL = direction === 'rtl';
+
   return (
-    <div className="flex flex-col h-screen bg-slate-100">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-        <button
-          onClick={onExit}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="font-medium">Exit</span>
-        </button>
+    <RTLProvider direction={direction} primaryLanguage={primaryLanguage}>
+      <div className="flex flex-col h-screen bg-slate-100">
+        <header className={`bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <button
+            onClick={onExit}
+            className={`flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}
+          >
+            <ChevronLeft className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
+            <span className="font-medium">{isRTL ? 'خروج' : 'Exit'}</span>
+          </button>
 
-        <div className="flex items-center gap-4">
-          <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+          <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-blue-600 transition-all duration-300 ${isRTL ? 'mr-auto' : ''}`}
+                style={{ width: `${progress}%`, marginLeft: isRTL ? 'auto' : undefined, marginRight: isRTL ? '0' : undefined }}
+              />
+            </div>
+            <span className="text-sm text-slate-500 font-medium">
+              {completedCount} / {graph.blocks.length}
+            </span>
           </div>
-          <span className="text-sm text-slate-500 font-medium">
-            {completedCount} / {graph.blocks.length}
-          </span>
-        </div>
-      </header>
+        </header>
 
-      <main className="flex-1 overflow-hidden">{renderBlock()}</main>
-    </div>
+        <main className="flex-1 overflow-hidden">{renderBlock()}</main>
+      </div>
+    </RTLProvider>
   );
 }

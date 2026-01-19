@@ -101,6 +101,23 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['user_block_states']['Insert']>;
       };
+      system_settings: {
+        Row: {
+          id: string;
+          setting_key: string;
+          setting_value: string;
+          description: string | null;
+          category: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['system_settings']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['system_settings']['Insert']>;
+      };
     };
   };
 }
@@ -111,7 +128,7 @@ export interface GraphDefinition {
   edges: Edge[];
 }
 
-export type BlockType = 'read' | 'video' | 'quiz' | 'form' | 'mission' | 'animation' | 'ai_help' | 'checkpoint';
+export type BlockType = 'read' | 'video' | 'quiz' | 'form' | 'mission' | 'animation' | 'ai_help' | 'checkpoint' | 'image' | 'code' | 'exercise' | 'resource';
 
 export interface Block {
   id: string;
@@ -133,7 +150,11 @@ export type BlockContent =
   | MissionBlockContent
   | AnimationBlockContent
   | AIHelpBlockContent
-  | CheckpointBlockContent;
+  | CheckpointBlockContent
+  | ImageBlockContent
+  | CodeBlockContent
+  | ExerciseBlockContent
+  | ResourceBlockContent;
 
 export interface ReadBlockContent {
   title: string;
@@ -146,6 +167,46 @@ export interface VideoBlockContent {
   url: string;
   duration?: number;
   transcript?: string;
+}
+
+export interface ImageBlockContent {
+  title: string;
+  url: string;
+  caption?: string;
+  alt?: string;
+}
+
+export interface CodeBlockContent {
+  title: string;
+  code: string;
+  language: string;
+  showLineNumbers?: boolean;
+  highlightLines?: number[];
+  description?: string;
+}
+
+export interface ExerciseBlockContent {
+  title: string;
+  description?: string;
+  problem: string;
+  hints?: string[];
+  solution: string;
+  solutionExplanation?: string;
+}
+
+export interface ResourceItem {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  type: 'link' | 'download' | 'video' | 'document';
+  icon?: string;
+}
+
+export interface ResourceBlockContent {
+  title: string;
+  description?: string;
+  resources: ResourceItem[];
 }
 
 export interface QuizQuestion {
@@ -191,7 +252,9 @@ export interface FormBlockContent {
 export interface MissionStep {
   id: string;
   instruction: string;
-  verificationMethod?: 'self_report' | 'screenshot' | 'url_check';
+  verificationMethod?: 'self_report' | 'screenshot' | 'url_check' | 'ai_validate';
+  expectedCriteria?: string;
+  inputType?: 'text' | 'textarea';
 }
 
 export interface MissionBlockContent {
@@ -261,6 +324,7 @@ export type Module = Database['public']['Tables']['modules']['Row'];
 export type JourneyVersion = Database['public']['Tables']['journey_versions']['Row'];
 export type UserJourneyRun = Database['public']['Tables']['user_journey_runs']['Row'];
 export type UserBlockState = Database['public']['Tables']['user_block_states']['Row'];
+export type SystemSettings = Database['public']['Tables']['system_settings']['Row'];
 
 export interface GlossaryTerm {
   id: string;

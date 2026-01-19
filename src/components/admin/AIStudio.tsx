@@ -9,10 +9,12 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react';
+import { useAIEnabled, AIDisabledMessage } from '../../hooks/useAIEnabled';
 
 type GenerationType = 'content' | 'quiz' | 'video_script';
 
 export function AIStudio() {
+  const { enabled: aiEnabled, isLoading: aiSettingsLoading } = useAIEnabled();
   const [activeType, setActiveType] = useState<GenerationType>('content');
   const [topic, setTopic] = useState('');
   const [targetAudience, setTargetAudience] = useState('beginners');
@@ -74,6 +76,36 @@ export function AIStudio() {
     { id: 'quiz' as GenerationType, label: 'Quiz Questions', icon: HelpCircle, description: 'Generate assessment questions with answers' },
     { id: 'video_script' as GenerationType, label: 'Video Script', icon: Video, description: 'Generate video narration scripts' },
   ];
+
+  // Show loading or disabled state
+  if (aiSettingsLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!aiEnabled) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="p-6 border-b border-slate-700">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">AI Content Studio</h1>
+              <p className="text-slate-400">Generate educational content with AI assistance</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <AIDisabledMessage />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">

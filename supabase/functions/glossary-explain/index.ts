@@ -18,6 +18,20 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
+// Helper function to determine the correct token parameter based on model
+function getTokenParam(model: string, tokens: number): Record<string, number> {
+  // Models that require max_completion_tokens (newer models)
+  const useCompletionTokens = 
+    model.startsWith('gpt-5') || 
+    model.startsWith('gpt-4o') ||
+    model.includes('o1') ||
+    model.includes('o3');
+  
+  return useCompletionTokens 
+    ? { max_completion_tokens: tokens }
+    : { max_tokens: tokens };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -107,7 +121,7 @@ Deno.serve(async (req: Request) => {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 200,
+        ...getTokenParam('gpt-4o-mini', 200),
         temperature: 0.7,
       }),
     });

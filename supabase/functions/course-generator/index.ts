@@ -30,6 +30,15 @@ interface GenerateRequest {
   blockCount?: number;
   includeVideo?: boolean;
   includeQuiz?: boolean;
+  includeMission?: boolean;
+  includeImage?: boolean;
+  includeCode?: boolean;
+  includeExercise?: boolean;
+  includeResource?: boolean;
+  includeForm?: boolean;
+  includeAIHelp?: boolean;
+  includeCheckpoint?: boolean;
+  includeAnimation?: boolean;
   existingContent?: string;
   existingGraph?: GraphDefinition;
   enableWebResearch?: boolean;
@@ -50,6 +59,20 @@ interface TavilyResponse {
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const TAVILY_API_KEY = Deno.env.get('TAVILY_API_KEY');
+
+// Helper function to determine the correct token parameter based on model
+function getTokenParam(model: string, tokens: number): Record<string, number> {
+  // Models that require max_completion_tokens (newer models)
+  const useCompletionTokens = 
+    model.startsWith('gpt-5') || 
+    model.startsWith('gpt-4o') ||
+    model.includes('o1') ||
+    model.includes('o3');
+  
+  return useCompletionTokens 
+    ? { max_completion_tokens: tokens }
+    : { max_tokens: tokens };
+}
 
 async function searchWeb(query: string, maxResults = 5): Promise<string> {
   if (!TAVILY_API_KEY) {
@@ -117,7 +140,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const body: GenerateRequest = await req.json();
-    const { type, topic, targetAudience, difficulty, duration, blockCount, includeVideo, includeQuiz, existingContent, existingGraph, enableWebResearch = true, model = 'gpt-4o' } = body;
+    const { 
+      type, topic, targetAudience, difficulty, duration, blockCount, 
+      includeVideo, includeQuiz, includeMission, includeImage, includeCode, 
+      includeExercise, includeResource, includeForm, includeAIHelp, 
+      includeCheckpoint, includeAnimation,
+      existingContent, existingGraph, enableWebResearch = true, model = 'gpt-4o' 
+    } = body;
 
     // Perform web research if enabled
     let webResearchContext = '';
@@ -168,8 +197,8 @@ The response MUST be valid JSON in this exact format:
       "id": "block_1",
       "type": "read",
       "content": {
-        "title": "...",
-        "markdown": "# Title\\n\\nContent...",
+        "title": "Introduction",
+        "markdown": "# Title\\n\\nContent with **bold**, *italic*, lists, and code examples...",
         "estimatedReadTime": 3
       }
     },
@@ -177,13 +206,35 @@ The response MUST be valid JSON in this exact format:
       "id": "block_2",
       "type": "video",
       "content": {
-        "title": "...",
+        "title": "Video Title",
         "url": "",
         "description": "Video about..."
       }
     },
     {
       "id": "block_3",
+      "type": "image",
+      "content": {
+        "title": "Diagram Title",
+        "url": "",
+        "caption": "Description of the image/diagram",
+        "alt": "Alt text for accessibility"
+      }
+    },
+    {
+      "id": "block_4",
+      "type": "code",
+      "content": {
+        "title": "Code Example",
+        "code": "// Your code here\\nfunction example() {\\n  return 'Hello World';\\n}",
+        "language": "javascript",
+        "showLineNumbers": true,
+        "highlightLines": [2],
+        "description": "Explanation of what this code does"
+      }
+    },
+    {
+      "id": "block_5",
       "type": "quiz",
       "content": {
         "title": "Knowledge Check",
@@ -191,9 +242,9 @@ The response MUST be valid JSON in this exact format:
           {
             "id": "q1",
             "prompt": "Question text?",
-            "choices": ["A", "B", "C", "D"],
+            "choices": ["Option A", "Option B", "Option C", "Option D"],
             "correctIndex": 0,
-            "explanation": "Explanation...",
+            "explanation": "Why this answer is correct...",
             "tags": ["topic"]
           }
         ],
@@ -201,7 +252,7 @@ The response MUST be valid JSON in this exact format:
       }
     },
     {
-      "id": "block_4",
+      "id": "block_6",
       "type": "ai_help",
       "content": {
         "title": "Need Help?",
@@ -209,34 +260,106 @@ The response MUST be valid JSON in this exact format:
       }
     },
     {
-      "id": "block_5",
+      "id": "block_7",
       "type": "mission",
       "content": {
         "title": "Hands-on Task",
-        "description": "...",
+        "description": "Complete this practical task",
         "steps": [
-          { "id": "s1", "instruction": "Step 1..." },
-          { "id": "s2", "instruction": "Step 2..." }
+          { "id": "s1", "instruction": "Step 1: Do this..." },
+          { "id": "s2", "instruction": "Step 2: Then do this..." }
         ]
+      }
+    },
+    {
+      "id": "block_8",
+      "type": "exercise",
+      "content": {
+        "title": "Practice Problem",
+        "description": "Test your understanding",
+        "problem": "Write a function that...",
+        "hints": ["Hint 1: Consider...", "Hint 2: Remember to..."],
+        "solution": "function solution() { ... }",
+        "solutionExplanation": "This solution works because..."
+      }
+    },
+    {
+      "id": "block_9",
+      "type": "resource",
+      "content": {
+        "title": "Additional Resources",
+        "description": "Explore these resources to learn more",
+        "resources": [
+          { "id": "r1", "title": "Official Documentation", "url": "https://example.com/docs", "type": "link", "description": "The official guide" },
+          { "id": "r2", "title": "Video Tutorial", "url": "https://example.com/video", "type": "video", "description": "A helpful video" }
+        ]
+      }
+    },
+    {
+      "id": "block_10",
+      "type": "form",
+      "content": {
+        "title": "Feedback Form",
+        "description": "Share your thoughts",
+        "fields": [
+          { "id": "f1", "type": "text", "label": "Your name", "required": true },
+          { "id": "f2", "type": "textarea", "label": "Your feedback", "required": true },
+          { "id": "f3", "type": "select", "label": "Rating", "options": ["Excellent", "Good", "Average", "Poor"], "required": true }
+        ],
+        "submitLabel": "Submit"
+      }
+    },
+    {
+      "id": "block_11",
+      "type": "checkpoint",
+      "content": {
+        "title": "Progress Check",
+        "description": "You've completed this section!"
+      }
+    },
+    {
+      "id": "block_12",
+      "type": "animation",
+      "content": {
+        "title": "Interactive Demo",
+        "animationType": "lottie",
+        "url": "",
+        "autoplay": true,
+        "loop": false
       }
     }
   ],
   "edges": [
     { "from": "block_1", "to": "block_2" },
-    { "from": "block_2", "to": "block_3" },
-    { "from": "block_3", "to": "block_5", "condition": { "all": [{ "fact": "quiz.scorePercent", "op": "gte", "value": 50 }] }, "priority": 10 },
-    { "from": "block_3", "to": "block_4", "condition": { "all": [{ "fact": "quiz.scorePercent", "op": "lt", "value": 50 }] }, "priority": 10 },
-    { "from": "block_4", "to": "block_3" }
+    { "from": "block_2", "to": "block_5" },
+    { "from": "block_5", "to": "block_7", "condition": { "all": [{ "fact": "quiz.scorePercent", "op": "gte", "value": 50 }] }, "priority": 10 },
+    { "from": "block_5", "to": "block_6", "condition": { "all": [{ "fact": "quiz.scorePercent", "op": "lt", "value": 50 }] }, "priority": 10 },
+    { "from": "block_6", "to": "block_5" }
   ]
 }
 
-Block types available: read, video, quiz, mission, form, ai_help, checkpoint, animation
+Block types available: read, video, image, code, quiz, mission, exercise, resource, form, ai_help, checkpoint, animation
+
+BLOCK TYPE GUIDELINES:
+- read: Rich markdown content with headers, lists, code examples. Always include.
+- video: Placeholder for video content. URL will be empty (to be filled later).
+- image: Placeholder for diagrams/images. URL will be empty (to be filled later).
+- code: Syntax-highlighted code snippets. Include language, actual working code examples.
+- quiz: Multiple choice questions with explanations. Include passingScore (usually 50).
+- mission: Hands-on tasks with step-by-step instructions.
+- exercise: Practice problems with hints and solutions.
+- resource: Curated links/resources. Use placeholder URLs if specific ones unknown.
+- form: Data collection forms for feedback, surveys. Define field types and labels.
+- ai_help: AI tutoring block. Mode options: targeted_remediation, open_chat, guided_explanation.
+- checkpoint: Progress validation points. Simple title and description.
+- animation: Interactive animations. URL will be empty (to be filled later).
 
 IMPORTANT:
-- Generate actual educational content, not placeholders
+- Generate actual educational content, not placeholders for read/code/quiz blocks
 - Include rich markdown for read blocks with headers, lists, code examples where relevant
 - Quiz questions should test understanding, not just recall
 - Add branching: if quiz score < 50%, route to ai_help block, then back to quiz
+- Only include block types that are requested
 - Return ONLY valid JSON, no markdown code blocks or explanations`;
 
         userPrompt = `Create a course outline about: ${topic}
@@ -245,10 +368,21 @@ Target audience: ${targetAudience || 'beginners'}
 Difficulty: ${difficulty || 'beginner'}
 Estimated duration: ${duration || 20} minutes
 Number of blocks: ${blockCount || 6}
-Include video blocks: ${includeVideo ? 'yes' : 'no'}
-Include quiz: ${includeQuiz !== false ? 'yes' : 'no'}
 
-Generate comprehensive educational content with proper flow and branching logic.${existingContext}${webResearchContext}`;
+BLOCK TYPES TO INCLUDE:
+- Video blocks: ${includeVideo ? 'yes' : 'no'}
+- Image blocks: ${includeImage ? 'yes' : 'no'}
+- Code snippets: ${includeCode ? 'yes' : 'no'}
+- Additional resources: ${includeResource ? 'yes' : 'no'}
+- Quiz & assessment: ${includeQuiz !== false ? 'yes' : 'no'}
+- Hands-on mission: ${includeMission !== false ? 'yes' : 'no'}
+- Practice exercises: ${includeExercise ? 'yes' : 'no'}
+- Data collection forms: ${includeForm ? 'yes' : 'no'}
+- AI help/remediation: ${includeAIHelp ? 'yes (add after quiz for failed attempts)' : 'no'}
+- Progress checkpoints: ${includeCheckpoint ? 'yes' : 'no'}
+- Animations: ${includeAnimation ? 'yes' : 'no'}
+
+Generate comprehensive educational content with proper flow and branching logic. Only include the block types marked "yes" above.${existingContext}${webResearchContext}`;
         break;
 
       case 'content':
@@ -333,7 +467,7 @@ Target audience: ${targetAudience || 'beginners'}${existingContext}${webResearch
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 4000,
+        ...getTokenParam(model, 4000),
         temperature: 0.7,
       }),
     });

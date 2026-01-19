@@ -24,9 +24,13 @@ import {
   Check,
   AlertCircle,
   X,
+  Code,
+  Dumbbell,
+  FolderOpen,
 } from 'lucide-react';
 import { BlockEditor } from './BlockEditor';
 import { AIContentGenerator } from './AIContentGenerator';
+import { BulkActionBar } from './BulkActionBar';
 import type { Block, Edge, GraphDefinition, BlockType } from '../../types/database';
 
 interface JourneyBuilderProps {
@@ -35,9 +39,7 @@ interface JourneyBuilderProps {
   onBack: () => void;
 }
 
-type ExtendedBlockType = BlockType | 'image';
-
-const BLOCK_TYPES: { type: ExtendedBlockType; label: string; icon: React.ElementType; color: string }[] = [
+const BLOCK_TYPES: { type: BlockType; label: string; icon: React.ElementType; color: string }[] = [
   { type: 'read', label: 'Read', icon: BookOpen, color: 'bg-blue-500' },
   { type: 'video', label: 'Video', icon: Video, color: 'bg-rose-500' },
   { type: 'image', label: 'Image', icon: Image, color: 'bg-emerald-500' },
@@ -47,6 +49,9 @@ const BLOCK_TYPES: { type: ExtendedBlockType; label: string; icon: React.Element
   { type: 'ai_help', label: 'AI Help', icon: Bot, color: 'bg-cyan-500' },
   { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-amber-500' },
   { type: 'animation', label: 'Animation', icon: Clapperboard, color: 'bg-pink-500' },
+  { type: 'code', label: 'Code', icon: Code, color: 'bg-slate-600' },
+  { type: 'exercise', label: 'Exercise', icon: Dumbbell, color: 'bg-violet-500' },
+  { type: 'resource', label: 'Resources', icon: FolderOpen, color: 'bg-indigo-500' },
 ];
 
 interface Toast {
@@ -66,6 +71,8 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
   const [isDirty, setIsDirty] = useState(false);
   const [showBlockEditor, setShowBlockEditor] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   useEffect(() => {
     loadJourney();
@@ -201,11 +208,11 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     }
   };
 
-  const addBlock = useCallback((type: ExtendedBlockType) => {
+  const addBlock = useCallback((type: BlockType) => {
     const id = `block_${Date.now()}`;
     const newBlock: Block = {
       id,
-      type: type as BlockType,
+      type,
       content: getDefaultContent(type),
     };
 
@@ -248,6 +255,65 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
     setShowBlockEditor(false);
     setIsDirty(true);
   }, [graph]);
+
+  const bulkDeleteBlocks = useCallback(() => {
+    const count = selectedBlockIds.size;
+    const blockNames = graph.blocks
+      .filter(b => selectedBlockIds.has(b.id))
+      .slice(0, 5)
+      .map(b => (b.content as { title?: string })?.title || 'Untitled')
+      .join(', ');
+    const message = count <= 5
+      ? `Delete ${count} block${count > 1 ? 's' : ''} (${blockNames})?`
+      : `Delete ${count} blocks (${blockNames}, and ${count - 5} more)?`;
+    
+    if (!confirm(`${message}\n\nAll connections to these blocks will also be removed. This action cannot be undone.`)) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const blockIdsArray = Array.from(selectedBlockIds);
+      const updatedBlocks = graph.blocks.filter(b => !selectedBlockIds.has(b.id));
+      const updatedEdges = graph.edges.filter(
+        e => !selectedBlockIds.has(e.from) && !selectedBlockIds.has(e.to)
+      );
+      
+      // Handle startBlock reassignment if deleted
+      let newStartBlockId = graph.startBlockId;
+      if (selectedBlockIds.has(graph.startBlockId)) {
+        newStartBlockId = updatedBlocks[0]?.id || '';
+      }
+
+      setGraph({ ...graph, blocks: updatedBlocks, edges: updatedEdges, startBlockId: newStartBlockId });
+      setSelectedBlockIds(new Set());
+      setSelectedBlockId(null);
+      setShowBlockEditor(false);
+      setIsDirty(true);
+      showToast('success', `Successfully deleted ${count} block${count > 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('Error bulk deleting blocks:', error);
+      showToast('error', 'Failed to delete some blocks. Please try again.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }, [graph, selectedBlockIds]);
+
+  const toggleBlockSelection = useCallback((blockId: string) => {
+    const newSelection = new Set(selectedBlockIds);
+    if (newSelection.has(blockId)) {
+      newSelection.delete(blockId);
+    } else {
+      newSelection.add(blockId);
+    }
+    setSelectedBlockIds(newSelection);
+  }, [selectedBlockIds]);
+
+  const selectAllBlocks = useCallback(() => {
+    setSelectedBlockIds(new Set(graph.blocks.map(b => b.id)));
+  }, [graph.blocks]);
+
+  const clearBlockSelection = useCallback(() => {
+    setSelectedBlockIds(new Set());
+  }, []);
 
   const addEdge = useCallback((fromId: string, toId: string) => {
     const existingEdge = graph.edges.find(
@@ -338,9 +404,25 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
           </div>
 
           <div className="flex items-center gap-2">
+            {selectedBlockIds.size > 0 && (
+              <button
+                onClick={bulkDeleteBlocks}
+                disabled={isBulkDeleting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {isBulkDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete {selectedBlockIds.size}
+              </button>
+            )}
+
             <button
               onClick={() => setShowAIGenerator(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg text-sm hover:from-purple-700 hover:to-blue-700 transition-colors"
+              disabled={isBulkDeleting}
+              className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg text-sm hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 transition-colors"
             >
               <Sparkles className="w-4 h-4" />
               AI Generate
@@ -348,7 +430,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
 
             <button
               onClick={saveJourney}
-              disabled={isSaving || !isDirty}
+              disabled={isSaving || !isDirty || isBulkDeleting}
               className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 text-white rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50 transition-colors"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -357,7 +439,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
 
             <button
               onClick={publishJourney}
-              disabled={isPublishing || graph.blocks.length === 0}
+              disabled={isPublishing || graph.blocks.length === 0 || isBulkDeleting}
               className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors"
             >
               {isPublishing ? (
@@ -392,7 +474,28 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-sm font-semibold text-slate-300 mb-3">Block Order</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-300">Block Order</h2>
+              {graph.blocks.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {selectedBlockIds.size > 0 ? (
+                    <button
+                      onClick={clearBlockSelection}
+                      className="text-xs px-2 py-1 bg-slate-700 text-white rounded hover:bg-slate-600 transition-colors"
+                    >
+                      Clear ({selectedBlockIds.size})
+                    </button>
+                  ) : (
+                    <button
+                      onClick={selectAllBlocks}
+                      className="text-xs px-2 py-1 bg-slate-700 text-white rounded hover:bg-slate-600 transition-colors"
+                    >
+                      Select All
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {graph.blocks.length === 0 ? (
               <p className="text-xs text-slate-500">No blocks yet. Add blocks to build your journey.</p>
             ) : (
@@ -406,42 +509,60 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                   return (
                     <div
                       key={block.id}
-                      onClick={() => handleBlockClick(block.id)}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                        isSelected
+                      className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                        selectedBlockIds.has(block.id)
                           ? 'bg-blue-600/20 border border-blue-500'
+                          : isSelected
+                          ? 'bg-blue-600/10 border border-blue-400'
                           : 'bg-slate-700/50 hover:bg-slate-700 border border-transparent'
                       }`}
                     >
-                      <div className={`w-6 h-6 ${blockType?.color || 'bg-slate-600'} rounded flex items-center justify-center`}>
-                        <Icon className="w-3 h-3 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-white truncate">
-                          {(block.content as { title?: string })?.title || `${blockType?.label || 'Block'} ${index + 1}`}
+                      <input
+                        type="checkbox"
+                        checked={selectedBlockIds.has(block.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleBlockSelection(block.id);
+                        }}
+                        disabled={isBulkDeleting}
+                        className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                      />
+                      <div
+                        onClick={() => handleBlockClick(block.id)}
+                        className="flex items-center gap-2 flex-1 cursor-pointer"
+                      >
+                        <div className={`w-6 h-6 ${blockType?.color || 'bg-slate-600'} rounded flex items-center justify-center`}>
+                          <Icon className="w-3 h-3 text-white" />
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-500">
-                          {isStart && <span className="text-emerald-400">Start</span>}
-                          {!isStart && <span>{blockType?.label}</span>}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white truncate">
+                            {(block.content as { title?: string })?.title || `${blockType?.label || 'Block'} ${index + 1}`}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-slate-500">
+                            {isStart && <span className="text-emerald-400">Start</span>}
+                            {!isStart && <span>{blockType?.label}</span>}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {!isStart && (
+                        <div className="flex items-center gap-1">
+                          {!isStart && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setStartBlock(block.id); }}
+                              disabled={isBulkDeleting}
+                              className="p-1 text-slate-500 hover:text-emerald-400 rounded disabled:opacity-50"
+                              title="Set as start"
+                            >
+                              <Flag className="w-3 h-3" />
+                            </button>
+                          )}
                           <button
-                            onClick={(e) => { e.stopPropagation(); setStartBlock(block.id); }}
-                            className="p-1 text-slate-500 hover:text-emerald-400 rounded"
-                            title="Set as start"
+                            onClick={(e) => { e.stopPropagation(); setConnectionMode({ fromBlockId: block.id }); }}
+                            disabled={isBulkDeleting}
+                            className={`p-1 rounded disabled:opacity-50 ${connectionMode?.fromBlockId === block.id ? 'text-blue-400 bg-blue-500/20' : 'text-slate-500 hover:text-blue-400'}`}
+                            title="Connect to another block"
                           >
-                            <Flag className="w-3 h-3" />
+                            <Link2 className="w-3 h-3" />
                           </button>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConnectionMode({ fromBlockId: block.id }); }}
-                          className={`p-1 rounded ${connectionMode?.fromBlockId === block.id ? 'text-blue-400 bg-blue-500/20' : 'text-slate-500 hover:text-blue-400'}`}
-                          title="Connect to another block"
-                        >
-                          <Link2 className="w-3 h-3" />
-                        </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -505,20 +626,38 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                       )}
 
                       <div
-                        onClick={() => handleBlockClick(block.id)}
-                        className={`relative p-4 rounded-xl cursor-pointer transition-all ${
-                          isSelected
+                        className={`relative p-4 rounded-xl transition-all ${
+                          selectedBlockIds.has(block.id)
                             ? 'bg-slate-700 ring-2 ring-blue-500'
+                            : isSelected
+                            ? 'bg-slate-700 ring-2 ring-blue-400'
                             : 'bg-slate-800 hover:bg-slate-700/80'
                         } ${connectionMode && connectionMode.fromBlockId !== block.id ? 'ring-2 ring-blue-400/50 ring-dashed' : ''}`}
                       >
-                        {isStart && (
-                          <div className="absolute -top-2 left-4 px-2 py-0.5 bg-emerald-500 text-white text-xs font-medium rounded">
-                            START
-                          </div>
-                        )}
+                        <div className="absolute top-2 left-2 z-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedBlockIds.has(block.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleBlockSelection(block.id);
+                            }}
+                            disabled={isBulkDeleting}
+                            className="w-5 h-5 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                          />
+                        </div>
 
-                        <div className="flex items-start gap-4">
+                        <div
+                          onClick={() => handleBlockClick(block.id)}
+                          className="cursor-pointer"
+                        >
+                          {isStart && (
+                            <div className="absolute -top-2 left-12 px-2 py-0.5 bg-emerald-500 text-white text-xs font-medium rounded">
+                              START
+                            </div>
+                          )}
+
+                          <div className="flex items-start gap-4 pl-8">
                           <div className={`w-12 h-12 ${blockType?.color || 'bg-slate-600'} rounded-xl flex items-center justify-center flex-shrink-0`}>
                             <Icon className="w-6 h-6 text-white" />
                           </div>
@@ -558,19 +697,22 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
                             )}
                           </div>
 
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedBlockId(block.id); setShowBlockEditor(true); }}
-                              className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg transition-colors"
-                            >
-                              <Settings2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
-                              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedBlockId(block.id); setShowBlockEditor(true); }}
+                                disabled={isBulkDeleting}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                <Settings2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
+                                disabled={isBulkDeleting}
+                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -615,7 +757,7 @@ export function JourneyBuilder({ moduleId, journeyVersionId, onBack }: JourneyBu
   );
 }
 
-function getDefaultContent(type: ExtendedBlockType): Block['content'] {
+function getDefaultContent(type: BlockType): Block['content'] {
   switch (type) {
     case 'read':
       return { title: 'New Reading', markdown: '# Title\n\nYour content here...', estimatedReadTime: 3 };
@@ -635,6 +777,12 @@ function getDefaultContent(type: ExtendedBlockType): Block['content'] {
       return { title: 'Checkpoint' };
     case 'animation':
       return { title: 'New Animation', animationType: 'lottie', url: '' };
+    case 'code':
+      return { title: 'Code Example', code: '// Your code here', language: 'javascript', showLineNumbers: true };
+    case 'exercise':
+      return { title: 'Practice Exercise', problem: '', solution: '', hints: [] };
+    case 'resource':
+      return { title: 'Resources', resources: [] };
     default:
       return { title: 'New Block' };
   }
@@ -665,6 +813,14 @@ function getBlockDescription(block: Block): string {
       return 'Progress checkpoint';
     case 'animation':
       return content.animationType as string || 'Animation';
+    case 'code':
+      return content.language as string || 'Code snippet';
+    case 'exercise':
+      const hints = (content.hints as unknown[]) || [];
+      return `${hints.length} hint${hints.length !== 1 ? 's' : ''}`;
+    case 'resource':
+      const resources = (content.resources as unknown[]) || [];
+      return `${resources.length} resource${resources.length !== 1 ? 's' : ''}`;
     default:
       return '';
   }

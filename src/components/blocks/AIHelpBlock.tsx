@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, User, Loader2, ChevronRight, Sparkles, RefreshCw } from 'lucide-react';
+import { Bot, Send, User, Loader2, ChevronRight, Sparkles, AlertTriangle } from 'lucide-react';
+import { useAIEnabled } from '../../hooks/useAIEnabled';
 import type { AIHelpBlockContent } from '../../types/database';
 
 interface AIHelpBlockProps {
@@ -15,6 +16,7 @@ interface Message {
 }
 
 export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }: AIHelpBlockProps) {
+  const { enabled: aiEnabled, helpModel, isLoading: aiSettingsLoading } = useAIEnabled();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -38,31 +40,18 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
   }, [messages]);
 
   useEffect(() => {
-    generateInitialMessage();
-  }, []);
+    // Only generate initial message when AI settings have loaded
+    if (!aiSettingsLoading) {
+      generateInitialMessage();
+    }
+  }, [aiSettingsLoading]);
 
+  // Update aiModel when settings load from hook
   useEffect(() => {
-    const loadModelSetting = async () => {
-      try {
-        const { createClient } = await import('../../lib/supabase');
-        const supabase = createClient();
-
-        const { data, error } = await supabase
-          .from('system_settings')
-          .select('setting_value')
-          .eq('setting_key', 'ai_help_model')
-          .maybeSingle();
-
-        if (!error && data) {
-          setAiModel(data.setting_value);
-        }
-      } catch (err) {
-        console.error('Error loading AI help model setting:', err);
-      }
-    };
-
-    loadModelSetting();
-  }, []);
+    if (!aiSettingsLoading && helpModel) {
+      setAiModel(helpModel);
+    }
+  }, [aiSettingsLoading, helpModel]);
 
   const generateInitialMessage = async () => {
     setIsLoading(true);
@@ -162,6 +151,54 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
   const handleComplete = () => {
     onComplete({ conversationHistory: messages });
   };
+
+  // Loading state
+  if (aiSettingsLoading) {
+    return (
+      <div className="flex flex-col h-full bg-slate-900 items-center justify-center">
+        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+        <p className="text-slate-400 mt-4">Loading AI assistant...</p>
+      </div>
+    );
+  }
+
+  // AI disabled state - allow user to skip this block
+  if (!aiEnabled) {
+    return (
+      <div className="flex flex-col h-full bg-slate-900">
+        <div className="border-b border-slate-700 px-6 py-4 bg-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{content.title}</h2>
+              <p className="text-sm text-slate-400">AI-powered learning assistance</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-8 h-8 text-amber-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">AI Assistant Unavailable</h3>
+            <p className="text-slate-400 mb-6">
+              The AI help feature is currently disabled. You can continue with the course
+              by clicking the button below.
+            </p>
+            <button
+              onClick={() => onComplete({ conversationHistory: [] })}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors mx-auto"
+            >
+              Continue
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-900">

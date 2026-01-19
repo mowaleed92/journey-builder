@@ -11,8 +11,17 @@ import {
   AlertCircle,
   CheckCircle,
   Globe,
-  Search
+  Search,
+  Image,
+  Code,
+  Dumbbell,
+  FolderOpen,
+  FileText,
+  Bot,
+  Flag,
+  Play
 } from 'lucide-react';
+import { useAIEnabled, AIDisabledMessage } from '../../hooks/useAIEnabled';
 import type { GraphDefinition } from '../../types/database';
 
 interface AIContentGeneratorProps {
@@ -22,6 +31,7 @@ interface AIContentGeneratorProps {
 }
 
 export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AIContentGeneratorProps) {
+  const { enabled: aiEnabled, contentModel, isLoading: aiSettingsLoading } = useAIEnabled();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -34,34 +44,26 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
   const [includeVideo, setIncludeVideo] = useState(true);
   const [includeQuiz, setIncludeQuiz] = useState(true);
   const [includeMission, setIncludeMission] = useState(true);
+  const [includeImage, setIncludeImage] = useState(false);
+  const [includeCode, setIncludeCode] = useState(true);
+  const [includeExercise, setIncludeExercise] = useState(false);
+  const [includeResource, setIncludeResource] = useState(false);
+  const [includeForm, setIncludeForm] = useState(false);
+  const [includeAIHelp, setIncludeAIHelp] = useState(true);
+  const [includeCheckpoint, setIncludeCheckpoint] = useState(false);
+  const [includeAnimation, setIncludeAnimation] = useState(false);
   const [enableWebResearch, setEnableWebResearch] = useState(true);
   const [generationStatus, setGenerationStatus] = useState('');
   const [aiModel, setAiModel] = useState('gpt-4o');
 
   const [generatedGraph, setGeneratedGraph] = useState<GraphDefinition | null>(null);
 
+  // Update aiModel when settings load from hook
   useEffect(() => {
-    const loadModelSetting = async () => {
-      try {
-        const { createClient } = await import('../../lib/supabase');
-        const supabase = createClient();
-
-        const { data, error } = await supabase
-          .from('system_settings')
-          .select('setting_value')
-          .eq('setting_key', 'ai_content_model')
-          .maybeSingle();
-
-        if (!error && data) {
-          setAiModel(data.setting_value);
-        }
-      } catch (err) {
-        console.error('Error loading AI model setting:', err);
-      }
-    };
-
-    loadModelSetting();
-  }, []);
+    if (!aiSettingsLoading && contentModel) {
+      setAiModel(contentModel);
+    }
+  }, [aiSettingsLoading, contentModel]);
 
   const generateCourse = async () => {
     setIsGenerating(true);
@@ -86,6 +88,15 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
             blockCount,
             includeVideo,
             includeQuiz,
+            includeMission,
+            includeImage,
+            includeCode,
+            includeExercise,
+            includeResource,
+            includeForm,
+            includeAIHelp,
+            includeCheckpoint,
+            includeAnimation,
             existingGraph,
             enableWebResearch,
             model: aiModel,
@@ -146,7 +157,14 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {step === 1 && (
+          {/* Show message if AI is disabled */}
+          {!aiSettingsLoading && !aiEnabled ? (
+            <AIDisabledMessage />
+          ) : aiSettingsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+            </div>
+          ) : step === 1 && (
             <div className="space-y-6">
               {existingGraph && existingGraph.blocks.length > 0 && (
                 <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
@@ -254,11 +272,12 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                 </div>
               </div>
 
+              {/* Content Blocks */}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-3">
-                  Include in Course
+                  Content Blocks
                 </label>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
                     <input
                       type="checkbox"
@@ -267,7 +286,7 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
                     <Video className="w-5 h-5 text-rose-400" />
-                    <div>
+                    <div className="flex-1">
                       <div className="text-white font-medium">Video Blocks</div>
                       <div className="text-xs text-slate-500">Add placeholder video sections</div>
                     </div>
@@ -276,12 +295,62 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                   <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
                     <input
                       type="checkbox"
+                      checked={includeImage}
+                      onChange={(e) => setIncludeImage(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Image className="w-5 h-5 text-emerald-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Image Blocks</div>
+                      <div className="text-xs text-slate-500">Add placeholder images and diagrams</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeCode}
+                      onChange={(e) => setIncludeCode(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Code className="w-5 h-5 text-cyan-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Code Snippets</div>
+                      <div className="text-xs text-slate-500">Syntax-highlighted code examples</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeResource}
+                      onChange={(e) => setIncludeResource(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <FolderOpen className="w-5 h-5 text-indigo-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Additional Resources</div>
+                      <div className="text-xs text-slate-500">Curated links and downloads</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Interactive Blocks */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">
+                  Interactive Blocks
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
                       checked={includeQuiz}
                       onChange={(e) => setIncludeQuiz(e.target.checked)}
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
                     <HelpCircle className="w-5 h-5 text-purple-400" />
-                    <div>
+                    <div className="flex-1">
                       <div className="text-white font-medium">Quiz & Assessment</div>
                       <div className="text-xs text-slate-500">Test learner understanding with questions</div>
                     </div>
@@ -295,9 +364,87 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph }: AICon
                       className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
                     />
                     <Target className="w-5 h-5 text-orange-400" />
-                    <div>
+                    <div className="flex-1">
                       <div className="text-white font-medium">Hands-on Mission</div>
                       <div className="text-xs text-slate-500">Practical task for learners to complete</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeExercise}
+                      onChange={(e) => setIncludeExercise(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Dumbbell className="w-5 h-5 text-violet-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Practice Exercises</div>
+                      <div className="text-xs text-slate-500">Problems with hints and solutions</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeForm}
+                      onChange={(e) => setIncludeForm(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <FileText className="w-5 h-5 text-amber-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Data Collection Forms</div>
+                      <div className="text-xs text-slate-500">Gather learner input and surveys</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Support Blocks */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">
+                  Support Blocks
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeAIHelp}
+                      onChange={(e) => setIncludeAIHelp(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Bot className="w-5 h-5 text-blue-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">AI Help / Remediation</div>
+                      <div className="text-xs text-slate-500">Personalized AI tutoring when struggling</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeCheckpoint}
+                      onChange={(e) => setIncludeCheckpoint(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Flag className="w-5 h-5 text-green-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Progress Checkpoints</div>
+                      <div className="text-xs text-slate-500">Validate understanding before continuing</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-900/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={includeAnimation}
+                      onChange={(e) => setIncludeAnimation(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-600 text-purple-500 focus:ring-purple-500"
+                    />
+                    <Play className="w-5 h-5 text-pink-400" />
+                    <div className="flex-1">
+                      <div className="text-white font-medium">Animations</div>
+                      <div className="text-xs text-slate-500">Interactive visual animations</div>
                     </div>
                   </label>
                 </div>

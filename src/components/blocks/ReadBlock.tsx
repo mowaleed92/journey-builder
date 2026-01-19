@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
-import { BookOpen, Clock, ChevronRight } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { BookOpen, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useRTL } from '../../contexts/RTLContext';
+import { ArabicContent } from '../glossary';
 import type { ReadBlockContent } from '../../types/database';
 
 interface ReadBlockProps {
   content: ReadBlockContent;
   onComplete: () => void;
   isCompleted: boolean;
+  trackId?: string;
+  moduleId?: string;
 }
 
-export function ReadBlock({ content, onComplete, isCompleted }: ReadBlockProps) {
+export function ReadBlock({ content, onComplete, isCompleted, trackId, moduleId }: ReadBlockProps) {
+  const { isRTL, direction, primaryLanguage } = useRTL();
   const [scrollProgress, setScrollProgress] = useState(0);
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
 
@@ -128,6 +133,24 @@ export function ReadBlock({ content, onComplete, isCompleted }: ReadBlockProps) 
     return elements;
   };
 
+  // Wrapper function to apply glossary term detection in RTL mode
+  const wrapWithGlossary = (text: string | (string | JSX.Element)[], key?: number) => {
+    if (!isRTL) {
+      return text;
+    }
+    
+    // Only process string content, not JSX elements
+    if (typeof text === 'string') {
+      return (
+        <ArabicContent key={key} trackId={trackId} moduleId={moduleId} className="inline">
+          {text}
+        </ArabicContent>
+      );
+    }
+    
+    return text;
+  };
+
   const renderInlineMarkdown = (text: string) => {
     const parts: (string | JSX.Element)[] = [];
     let remaining = text;
@@ -147,23 +170,33 @@ export function ReadBlock({ content, onComplete, isCompleted }: ReadBlockProps) 
       ].filter(Boolean).sort((a, b) => a!.index - b!.index);
 
       if (matches.length === 0) {
-        parts.push(remaining);
+        // Apply glossary detection to plain text in RTL mode
+        parts.push(isRTL ? wrapWithGlossary(remaining, keyIndex++) as JSX.Element : remaining);
         break;
       }
 
       const first = matches[0]!;
 
       if (first.index > 0) {
-        parts.push(remaining.slice(0, first.index));
+        const plainText = remaining.slice(0, first.index);
+        parts.push(isRTL ? wrapWithGlossary(plainText, keyIndex++) as JSX.Element : plainText);
       }
 
       switch (first.type) {
         case 'bold':
-          parts.push(<strong key={keyIndex++} className="font-semibold text-slate-900">{first.match![1]}</strong>);
+          parts.push(
+            <strong key={keyIndex++} className="font-semibold text-slate-900">
+              {isRTL ? wrapWithGlossary(first.match![1], keyIndex++) : first.match![1]}
+            </strong>
+          );
           remaining = remaining.slice(first.index + first.match![0].length);
           break;
         case 'italic':
-          parts.push(<em key={keyIndex++} className="italic">{first.match![1]}</em>);
+          parts.push(
+            <em key={keyIndex++} className="italic">
+              {isRTL ? wrapWithGlossary(first.match![1], keyIndex++) : first.match![1]}
+            </em>
+          );
           remaining = remaining.slice(first.index + first.match![0].length);
           break;
         case 'code':
@@ -194,34 +227,46 @@ export function ReadBlock({ content, onComplete, isCompleted }: ReadBlockProps) 
     return parts;
   };
 
+  // Localized button text
+  const buttonText = {
+    continue: isRTL ? 'متابعة' : 'Continue',
+    complete: isRTL ? 'تم الإنتهاء' : 'Mark as Complete',
+    scroll: isRTL ? 'مرر للأسفل للمتابعة' : 'Scroll to continue',
+    minRead: isRTL ? 'دقائق للقراءة' : 'min read',
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-white" dir={direction}>
       <div className="border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center gap-3 mb-2">
+        <div className={`flex items-center gap-3 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
             <BookOpen className="w-5 h-5 text-blue-600" />
           </div>
-          <div>
+          <div className={isRTL ? 'text-right' : ''}>
             <h2 className="text-xl font-bold text-slate-900">{content.title}</h2>
             {content.estimatedReadTime && (
-              <div className="flex items-center gap-1 text-sm text-slate-500">
+              <div className={`flex items-center gap-1 text-sm text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Clock className="w-4 h-4" />
-                <span>{content.estimatedReadTime} min read</span>
+                <span>{content.estimatedReadTime} {buttonText.minRead}</span>
               </div>
             )}
           </div>
         </div>
         <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${scrollProgress}%` }}
+            className={`h-full bg-blue-500 transition-all duration-300 ${isRTL ? 'ml-auto' : ''}`}
+            style={{ 
+              width: `${scrollProgress}%`,
+              marginLeft: isRTL ? 'auto' : undefined,
+              marginRight: isRTL ? '0' : undefined
+            }}
           />
         </div>
       </div>
 
       <div
         id="read-content-scroll"
-        className="flex-1 overflow-y-auto px-6 py-6"
+        className={`flex-1 overflow-y-auto px-6 py-6 ${isRTL ? 'arabic-content' : ''}`}
       >
         <div className="max-w-3xl mx-auto">
           {renderMarkdown(content.markdown)}
@@ -234,14 +279,15 @@ export function ReadBlock({ content, onComplete, isCompleted }: ReadBlockProps) 
           disabled={!hasScrolledToEnd && !isCompleted}
           className={`
             w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all
+            ${isRTL ? 'flex-row-reverse' : ''}
             ${hasScrolledToEnd || isCompleted
               ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }
           `}
         >
-          {isCompleted ? 'Continue' : hasScrolledToEnd ? 'Mark as Complete' : 'Scroll to continue'}
-          <ChevronRight className="w-5 h-5" />
+          {isCompleted ? buttonText.continue : hasScrolledToEnd ? buttonText.complete : buttonText.scroll}
+          {isRTL ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
         </button>
       </div>
     </div>

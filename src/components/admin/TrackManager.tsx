@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../hooks';
 import {
   Plus,
   Edit2,
@@ -12,6 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import type { Track, Module } from '../../types/database';
+import { BulkActionBar } from './BulkActionBar';
+import { SelectableCard } from './SelectableCard';
 
 interface TrackManagerProps {
   onEditJourney: (moduleId: string, journeyVersionId?: string) => void;
@@ -33,12 +36,21 @@ const SAMPLE_COVER_IMAGES = [
 ];
 
 export function TrackManager({ onEditJourney }: TrackManagerProps) {
+  const { showToast } = useToast();
   const [tracks, setTracks] = useState<TrackWithModules[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateTrack, setShowCreateTrack] = useState(false);
   const [showCreateModule, setShowCreateModule] = useState<string | null>(null);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
+  const [deletingTrackId, setDeletingTrackId] = useState<string | null>(null);
+  const [deletingModuleId, setDeletingModuleId] = useState<string | null>(null);
+  const [isCreatingTrack, setIsCreatingTrack] = useState(false);
+  const [isCreatingModule, setIsCreatingModule] = useState(false);
+  const [isSavingTrack, setIsSavingTrack] = useState(false);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   useEffect(() => {
     loadTracks();
@@ -64,37 +76,50 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
   };
 
   const createTrack = async (data: { title: string; description: string; level: string; cover_image_url?: string }) => {
-    const { error } = await supabase.from('tracks').insert({
-      title: data.title,
-      description: data.description,
-      level: data.level,
-      cover_image_url: data.cover_image_url || null,
-      tags: JSON.stringify([]),
-    });
+    setIsCreatingTrack(true);
+    try {
+      const { error } = await supabase.from('tracks').insert({
+        title: data.title,
+        description: data.description,
+        level: data.level,
+        cover_image_url: data.cover_image_url || null,
+        tags: JSON.stringify([]),
+      });
 
-    if (!error) {
-      loadTracks();
+      if (error) throw error;
+
+      showToast('success', 'Track created successfully');
+      await loadTracks();
       setShowCreateTrack(false);
+    } catch (error) {
+      console.error('Error creating track:', error);
+      showToast('error', 'Failed to create track. Please try again.');
+    } finally {
+      setIsCreatingTrack(false);
     }
   };
 
   const createModule = async (trackId: string, data: { title: string; description: string }) => {
-    const track = tracks.find(t => t.id === trackId);
-    const orderIndex = track?.modules?.length || 0;
+    setIsCreatingModule(true);
+    try {
+      const track = tracks.find(t => t.id === trackId);
+      const orderIndex = track?.modules?.length || 0;
 
-    const { data: module, error } = await supabase
-      .from('modules')
-      .insert({
-        track_id: trackId,
-        title: data.title,
-        description: data.description,
-        order_index: orderIndex,
-      })
-      .select()
-      .single();
+      const { data: module, error } = await supabase
+        .from('modules')
+        .insert({
+          track_id: trackId,
+          title: data.title,
+          description: data.description,
+          order_index: orderIndex,
+        })
+        .select()
+        .single();
 
-    if (!error && module) {
-      const { data: journeyVersion } = await supabase
+      if (error) throw error;
+      if (!module) throw new Error('Module creation failed');
+
+      const { data: journeyVersion, error: journeyError } = await supabase
         .from('journey_versions')
         .insert({
           module_id: module.id,
@@ -105,27 +130,170 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
         .select()
         .single();
 
-      loadTracks();
+      if (journeyError) {
+        console.error('Error creating journey version:', journeyError);
+        // Module was created, but journey version failed - still show partial success
+        showToast('warning', 'Module created but journey setup failed. Please try editing the module.');
+      } else {
+        showToast('success', 'Module created successfully');
+      }
+
+      await loadTracks();
       setShowCreateModule(null);
 
       if (journeyVersion) {
         onEditJourney(module.id, journeyVersion.id);
       }
+    } catch (error) {
+      console.error('Error creating module:', error);
+      showToast('error', 'Failed to create module. Please try again.');
+    } finally {
+      setIsCreatingModule(false);
     }
   };
 
   const deleteTrack = async (trackId: string) => {
     if (!confirm('Are you sure you want to delete this track and all its modules?')) return;
 
-    await supabase.from('tracks').delete().eq('id', trackId);
-    loadTracks();
+    setDeletingTrackId(trackId);
+    try {
+      const { error } = await supabase.from('tracks').delete().eq('id', trackId);
+      
+      if (error) throw error;
+
+      showToast('success', 'Track deleted successfully');
+      await loadTracks();
+    } catch (error) {
+      console.error('Error deleting track:', error);
+      showToast('error', 'Failed to delete track. Please try again.');
+    } finally {
+      setDeletingTrackId(null);
+    }
   };
 
   const deleteModule = async (moduleId: string) => {
     if (!confirm('Are you sure you want to delete this module?')) return;
 
-    await supabase.from('modules').delete().eq('id', moduleId);
-    loadTracks();
+    setDeletingModuleId(moduleId);
+    try {
+      const { error } = await supabase.from('modules').delete().eq('id', moduleId);
+      
+      if (error) throw error;
+
+      showToast('success', 'Module deleted successfully');
+      await loadTracks();
+    } catch (error) {
+      console.error('Error deleting module:', error);
+      showToast('error', 'Failed to delete module. Please try again.');
+    } finally {
+      setDeletingModuleId(null);
+    }
+  };
+
+  const bulkDeleteTracks = async () => {
+    const count = selectedTrackIds.size;
+    const trackNames = tracks
+      .filter(t => selectedTrackIds.has(t.id))
+      .slice(0, 5)
+      .map(t => t.title)
+      .join(', ');
+    const message = count <= 5 
+      ? `Delete ${count} track${count > 1 ? 's' : ''} (${trackNames})?`
+      : `Delete ${count} tracks (${trackNames}, and ${count - 5} more)?`;
+    
+    if (!confirm(`${message}\n\nThis will also delete all associated modules and content. This action cannot be undone.`)) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('tracks')
+        .delete()
+        .in('id', Array.from(selectedTrackIds));
+      
+      if (error) throw error;
+
+      showToast('success', `Successfully deleted ${count} track${count > 1 ? 's' : ''}`);
+      setSelectedTrackIds(new Set());
+      await loadTracks();
+    } catch (error) {
+      console.error('Error bulk deleting tracks:', error);
+      showToast('error', 'Failed to delete some tracks. Please try again.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const bulkDeleteModules = async () => {
+    const count = selectedModuleIds.size;
+    const moduleNames = tracks
+      .flatMap(t => t.modules || [])
+      .filter(m => selectedModuleIds.has(m.id))
+      .slice(0, 5)
+      .map(m => m.title)
+      .join(', ');
+    const message = count <= 5 
+      ? `Delete ${count} module${count > 1 ? 's' : ''} (${moduleNames})?`
+      : `Delete ${count} modules (${moduleNames}, and ${count - 5} more)?`;
+    
+    if (!confirm(`${message}\n\nThis will also delete all associated journeys and content. This action cannot be undone.`)) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('modules')
+        .delete()
+        .in('id', Array.from(selectedModuleIds));
+      
+      if (error) throw error;
+
+      showToast('success', `Successfully deleted ${count} module${count > 1 ? 's' : ''}`);
+      setSelectedModuleIds(new Set());
+      await loadTracks();
+    } catch (error) {
+      console.error('Error bulk deleting modules:', error);
+      showToast('error', 'Failed to delete some modules. Please try again.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleTrackSelection = (trackId: string) => {
+    const newSelection = new Set(selectedTrackIds);
+    if (newSelection.has(trackId)) {
+      newSelection.delete(trackId);
+    } else {
+      newSelection.add(trackId);
+    }
+    setSelectedTrackIds(newSelection);
+  };
+
+  const toggleModuleSelection = (moduleId: string) => {
+    const newSelection = new Set(selectedModuleIds);
+    if (newSelection.has(moduleId)) {
+      newSelection.delete(moduleId);
+    } else {
+      newSelection.add(moduleId);
+    }
+    setSelectedModuleIds(newSelection);
+  };
+
+  const selectAllTracks = () => {
+    setSelectedTrackIds(new Set(filteredTracks.map(t => t.id)));
+  };
+
+  const selectAllModules = (trackId: string) => {
+    const track = tracks.find(t => t.id === trackId);
+    if (!track) return;
+    const moduleIds = (track.modules || []).map(m => m.id);
+    setSelectedModuleIds(new Set([...selectedModuleIds, ...moduleIds]));
+  };
+
+  const clearTrackSelection = () => {
+    setSelectedTrackIds(new Set());
+  };
+
+  const clearModuleSelection = () => {
+    setSelectedModuleIds(new Set());
   };
 
   const filteredTracks = tracks.filter(
@@ -158,7 +326,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -177,14 +345,27 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredTracks.map((track) => (
-              <div
-                key={track.id}
-                className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden"
-              >
-                <div className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+          <>
+            <BulkActionBar
+              selectedCount={selectedTrackIds.size}
+              totalCount={filteredTracks.length}
+              onSelectAll={selectAllTracks}
+              onSelectNone={clearTrackSelection}
+              onDelete={bulkDeleteTracks}
+              isDeleting={isBulkDeleting}
+              itemName="tracks"
+            />
+            <div className="p-6 space-y-4">
+              {filteredTracks.map((track) => (
+                <SelectableCard
+                  key={track.id}
+                  isSelected={selectedTrackIds.has(track.id)}
+                  onToggleSelect={() => toggleTrackSelection(track.id)}
+                  disabled={isBulkDeleting}
+                  className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden"
+                >
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4 pl-8">
                     {track.cover_image_url ? (
                       <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
                         <img
@@ -214,26 +395,66 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                         </span>
                       </div>
                     </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTrack(track);
+                        }}
+                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                        disabled={deletingTrackId === track.id || isBulkDeleting}
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTrack(track.id);
+                        }}
+                        disabled={deletingTrackId === track.id || isBulkDeleting}
+                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {deletingTrackId === track.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setEditingTrack(track)}
-                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => deleteTrack(track.id)}
-                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-700">
-                  {track.modules?.map((module) => {
+                  <div className="border-t border-slate-700">
+                    {selectedModuleIds.size > 0 && (track.modules || []).some(m => selectedModuleIds.has(m.id)) && (
+                      <div className="bg-slate-900/50 px-4 py-2 border-b border-slate-700 flex items-center justify-between">
+                        <span className="text-sm text-slate-400">
+                          {(track.modules || []).filter(m => selectedModuleIds.has(m.id)).length} module{(track.modules || []).filter(m => selectedModuleIds.has(m.id)).length > 1 ? 's' : ''} selected
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectAllModules(track.id);
+                            }}
+                            className="text-xs px-2 py-1 bg-slate-700 text-white rounded hover:bg-slate-600 transition-colors"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              bulkDeleteModules();
+                            }}
+                            disabled={isBulkDeleting}
+                            className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 transition-colors"
+                          >
+                            Delete Selected
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {track.modules?.map((module) => {
                     const publishedVersion = module.journey_versions?.find(v => v.status === 'published');
                     const draftVersion = module.journey_versions?.find(v => v.status === 'draft');
                     const latestVersion = publishedVersion || draftVersion;
@@ -241,9 +462,21 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
                     return (
                       <div
                         key={module.id}
-                        className="px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors border-b border-slate-700 last:border-b-0"
+                        className={`px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors border-b border-slate-700 last:border-b-0 ${
+                          selectedModuleIds.has(module.id) ? 'bg-blue-500/10' : ''
+                        }`}
                       >
-                        <div className="flex items-center gap-3 ml-12">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedModuleIds.has(module.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleModuleSelection(module.id);
+                            }}
+                            disabled={isBulkDeleting}
+                            className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                          />
                           <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-sm font-medium text-slate-300">
                             {module.order_index + 1}
                           </div>
@@ -265,34 +498,50 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
 
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => onEditJourney(module.id, latestVersion?.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditJourney(module.id, latestVersion?.id);
+                            }}
                             className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
                           >
                             Edit Journey
                             <ChevronRight className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => deleteModule(module.id)}
-                            className="p-1.5 text-slate-500 hover:text-red-400 rounded transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteModule(module.id);
+                            }}
+                            disabled={deletingModuleId === module.id || isBulkDeleting}
+                            className="p-1.5 text-slate-500 hover:text-red-400 rounded transition-colors disabled:opacity-50"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {deletingModuleId === module.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>
                     );
                   })}
 
-                  <button
-                    onClick={() => setShowCreateModule(track.id)}
-                    className="w-full px-4 py-3 flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Module
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCreateModule(track.id);
+                      }}
+                      disabled={isBulkDeleting}
+                      className="w-full px-4 py-3 flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Module
+                    </button>
+                  </div>
+                </SelectableCard>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -300,6 +549,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
         <CreateTrackModal
           onClose={() => setShowCreateTrack(false)}
           onCreate={createTrack}
+          isCreating={isCreatingTrack}
         />
       )}
 
@@ -307,6 +557,7 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
         <CreateModuleModal
           onClose={() => setShowCreateModule(null)}
           onCreate={(data) => createModule(showCreateModule, data)}
+          isCreating={isCreatingModule}
         />
       )}
 
@@ -314,10 +565,23 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
         <EditTrackModal
           track={editingTrack}
           onClose={() => setEditingTrack(null)}
+          isSaving={isSavingTrack}
           onSave={async (data) => {
-            await supabase.from('tracks').update(data).eq('id', editingTrack.id);
-            loadTracks();
-            setEditingTrack(null);
+            setIsSavingTrack(true);
+            try {
+              const { error } = await supabase.from('tracks').update(data).eq('id', editingTrack.id);
+              
+              if (error) throw error;
+
+              showToast('success', 'Track updated successfully');
+              await loadTracks();
+              setEditingTrack(null);
+            } catch (error) {
+              console.error('Error updating track:', error);
+              showToast('error', 'Failed to update track. Please try again.');
+            } finally {
+              setIsSavingTrack(false);
+            }
           }}
         />
       )}
@@ -325,9 +589,10 @@ export function TrackManager({ onEditJourney }: TrackManagerProps) {
   );
 }
 
-function CreateTrackModal({ onClose, onCreate }: {
+function CreateTrackModal({ onClose, onCreate, isCreating }: {
   onClose: () => void;
   onCreate: (data: { title: string; description: string; level: string; cover_image_url?: string }) => void;
+  isCreating?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -438,16 +703,18 @@ function CreateTrackModal({ onClose, onCreate }: {
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            disabled={isCreating}
+            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={() => onCreate({ title, description, level, cover_image_url: coverImageUrl || undefined })}
-            disabled={!title.trim()}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!title.trim() || isCreating}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            Create Track
+            {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isCreating ? 'Creating...' : 'Create Track'}
           </button>
         </div>
       </div>
@@ -455,9 +722,10 @@ function CreateTrackModal({ onClose, onCreate }: {
   );
 }
 
-function CreateModuleModal({ onClose, onCreate }: {
+function CreateModuleModal({ onClose, onCreate, isCreating }: {
   onClose: () => void;
   onCreate: (data: { title: string; description: string }) => void;
+  isCreating?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -494,16 +762,18 @@ function CreateModuleModal({ onClose, onCreate }: {
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            disabled={isCreating}
+            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={() => onCreate({ title, description })}
-            disabled={!title.trim()}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!title.trim() || isCreating}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            Create Module
+            {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isCreating ? 'Creating...' : 'Create Module'}
           </button>
         </div>
       </div>
@@ -511,10 +781,11 @@ function CreateModuleModal({ onClose, onCreate }: {
   );
 }
 
-function EditTrackModal({ track, onClose, onSave }: {
+function EditTrackModal({ track, onClose, onSave, isSaving }: {
   track: Track;
   onClose: () => void;
   onSave: (data: Partial<Track>) => void;
+  isSaving?: boolean;
 }) {
   const [title, setTitle] = useState(track.title);
   const [description, setDescription] = useState(track.description || '');
@@ -623,16 +894,18 @@ function EditTrackModal({ track, onClose, onSave }: {
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            disabled={isSaving}
+            className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={() => onSave({ title, description, level, cover_image_url: coverImageUrl || null })}
-            disabled={!title.trim()}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!title.trim() || isSaving}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            Save Changes
+            {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>

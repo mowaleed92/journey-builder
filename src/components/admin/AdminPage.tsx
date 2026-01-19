@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AdminLayout } from './AdminLayout';
 import { TrackManager } from './TrackManager';
 import { JourneyBuilder } from './JourneyBuilder';
@@ -14,23 +15,45 @@ import {
 
 interface AdminPageProps {
   onExit: () => void;
+  onSettingsChanged?: () => void;
 }
 
-export function AdminPage({ onExit }: AdminPageProps) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+// Helper to get tab from URL path
+function getTabFromPath(pathname: string): string {
+  if (pathname.startsWith('/admin/builder')) return 'builder';
+  if (pathname.startsWith('/admin/tracks')) return 'tracks';
+  if (pathname.startsWith('/admin/ai-studio')) return 'ai-studio';
+  if (pathname.startsWith('/admin/settings')) return 'settings';
+  return 'dashboard';
+}
+
+export function AdminPage({ onExit, onSettingsChanged }: AdminPageProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(() => getTabFromPath(location.pathname));
   const [editingJourney, setEditingJourney] = useState<{
     moduleId: string;
     journeyVersionId?: string;
   } | null>(null);
 
+  // Sync tab state with URL changes
+  useEffect(() => {
+    const tabFromUrl = getTabFromPath(location.pathname);
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [location.pathname]);
+
   const handleEditJourney = (moduleId: string, journeyVersionId?: string) => {
     setEditingJourney({ moduleId, journeyVersionId });
     setActiveTab('builder');
+    navigate(`/admin/builder/${moduleId}${journeyVersionId ? `?v=${journeyVersionId}` : ''}`);
   };
 
   const handleBackFromBuilder = () => {
     setEditingJourney(null);
     setActiveTab('tracks');
+    navigate('/admin/tracks');
   };
 
   const renderContent = () => {
@@ -68,7 +91,7 @@ export function AdminPage({ onExit }: AdminPageProps) {
       case 'ai-studio':
         return <AIStudio />;
       case 'settings':
-        return <AdminSettings />;
+        return <AdminSettings onSettingsChanged={onSettingsChanged} />;
       default:
         return null;
     }
@@ -85,12 +108,77 @@ export function AdminPage({ onExit }: AdminPageProps) {
   );
 }
 
+interface DashboardStats {
+  totalTracks: number;
+  activeLearners: number;
+  avgCompletion: number;
+  totalHours: number;
+}
+
 function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const stats = [
-    { label: 'Total Tracks', value: '3', icon: BookOpen, color: 'bg-blue-500' },
-    { label: 'Active Learners', value: '127', icon: Users, color: 'bg-emerald-500' },
-    { label: 'Avg. Completion', value: '78%', icon: TrendingUp, color: 'bg-purple-500' },
-    { label: 'Total Hours', value: '234', icon: Clock, color: 'bg-amber-500' },
+  const [stats, setStats] = useState<DashboardStats>({
+    totalTracks: 0,
+    activeLearners: 0,
+    avgCompletion: 0,
+    totalHours: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadDashboardStats();
+  }, []);
+
+  const loadDashboardStats = async () => {
+    try {
+      const { supabase } = await import('../../lib/supabase');
+
+      // Query total tracks
+      const { count: tracksCount } = await supabase
+        .from('tracks')
+        .select('*', { count: 'exact', head: true });
+
+      // Query unique active learners (users with journey runs)
+      const { data: learnerData } = await supabase
+        .from('user_journey_runs')
+        .select('user_id');
+      
+      const uniqueLearners = new Set(learnerData?.map(r => r.user_id) || []);
+
+      // Query completion stats
+      const { data: runsData } = await supabase
+        .from('user_journey_runs')
+        .select('status');
+      
+      const totalRuns = runsData?.length || 0;
+      const completedRuns = runsData?.filter(r => r.status === 'completed').length || 0;
+      const avgCompletion = totalRuns > 0 ? Math.round((completedRuns / totalRuns) * 100) : 0;
+
+      // Query total learning hours from completed block states
+      const { data: blockStatesData } = await supabase
+        .from('user_block_states')
+        .select('time_spent_seconds');
+      
+      const totalSeconds = blockStatesData?.reduce((sum, b) => sum + (b.time_spent_seconds || 0), 0) || 0;
+      const totalHours = Math.round(totalSeconds / 3600);
+
+      setStats({
+        totalTracks: tracksCount || 0,
+        activeLearners: uniqueLearners.size,
+        avgCompletion,
+        totalHours,
+      });
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const statsDisplay = [
+    { label: 'Total Tracks', value: isLoading ? '...' : String(stats.totalTracks), icon: BookOpen, color: 'bg-blue-500' },
+    { label: 'Active Learners', value: isLoading ? '...' : String(stats.activeLearners), icon: Users, color: 'bg-emerald-500' },
+    { label: 'Avg. Completion', value: isLoading ? '...' : `${stats.avgCompletion}%`, icon: TrendingUp, color: 'bg-purple-500' },
+    { label: 'Total Hours', value: isLoading ? '...' : String(stats.totalHours), icon: Clock, color: 'bg-amber-500' },
   ];
 
   return (
@@ -102,7 +190,7 @@ function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => {
+          {statsDisplay.map((stat) => {
             const Icon = stat.icon;
             return (
               <div
@@ -193,9 +281,21 @@ function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
   );
 }
 
-function AdminSettings() {
+interface AdminSettingsProps {
+  onSettingsChanged?: () => void;
+}
+
+function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
+  // General settings state
+  const [platformName, setPlatformName] = useState('Learning Hub');
+  const [language, setLanguage] = useState('English');
+  
+  // AI settings state
   const [contentModel, setContentModel] = useState('gpt-4o');
   const [helpModel, setHelpModel] = useState('gpt-4o-mini');
+  const [aiEnabled, setAiEnabled] = useState(true);
+  
+  // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -206,28 +306,45 @@ function AdminSettings() {
 
   const loadSettings = async () => {
     try {
-      const { createClient } = await import('../../lib/supabase');
-      const supabase = createClient();
+      const { supabase } = await import('../../lib/supabase');
 
       const { data, error } = await supabase
         .from('system_settings')
         .select('setting_key, setting_value')
-        .in('setting_key', ['ai_content_model', 'ai_help_model']);
+        .in('setting_key', [
+          'ai_content_model', 
+          'ai_help_model', 
+          'platform_name', 
+          'default_language',
+          'ai_enabled'
+        ]);
 
       if (error) throw error;
 
       if (data) {
         data.forEach(setting => {
-          if (setting.setting_key === 'ai_content_model') {
-            setContentModel(setting.setting_value);
-          } else if (setting.setting_key === 'ai_help_model') {
-            setHelpModel(setting.setting_value);
+          switch (setting.setting_key) {
+            case 'ai_content_model':
+              setContentModel(setting.setting_value);
+              break;
+            case 'ai_help_model':
+              setHelpModel(setting.setting_value);
+              break;
+            case 'platform_name':
+              setPlatformName(setting.setting_value);
+              break;
+            case 'default_language':
+              setLanguage(setting.setting_value);
+              break;
+            case 'ai_enabled':
+              setAiEnabled(setting.setting_value === 'true');
+              break;
           }
         });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
-      setMessage({ type: 'error', text: 'Failed to load settings' });
+      setMessage({ type: 'error', text: 'Failed to load settings. Please check your connection and try again.' });
     } finally {
       setLoading(false);
     }
@@ -238,31 +355,60 @@ function AdminSettings() {
     setMessage(null);
 
     try {
-      const { createClient } = await import('../../lib/supabase');
-      const supabase = createClient();
+      const { supabase } = await import('../../lib/supabase');
 
       const updates = [
         { setting_key: 'ai_content_model', setting_value: contentModel },
-        { setting_key: 'ai_help_model', setting_value: helpModel }
+        { setting_key: 'ai_help_model', setting_value: helpModel },
+        { setting_key: 'platform_name', setting_value: platformName },
+        { setting_key: 'default_language', setting_value: language },
+        { setting_key: 'ai_enabled', setting_value: String(aiEnabled) }
       ];
 
+      // Use upsert to handle both insert and update
       for (const update of updates) {
         const { error } = await supabase
           .from('system_settings')
-          .update({ setting_value: update.setting_value })
-          .eq('setting_key', update.setting_key);
+          .upsert(
+            { 
+              setting_key: update.setting_key, 
+              setting_value: update.setting_value,
+              category: update.setting_key.startsWith('ai_') ? 'ai' : 'general',
+              description: getSettingDescription(update.setting_key)
+            },
+            { onConflict: 'setting_key' }
+          );
 
-        if (error) throw error;
+        if (error) {
+          console.error(`Error saving ${update.setting_key}:`, error);
+          throw error;
+        }
       }
 
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
       setTimeout(() => setMessage(null), 3000);
+      
+      // Notify parent that settings have changed
+      if (onSettingsChanged) {
+        onSettingsChanged();
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
-      setMessage({ type: 'error', text: 'Failed to save settings' });
+      setMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const getSettingDescription = (key: string): string => {
+    const descriptions: Record<string, string> = {
+      'ai_content_model': 'AI model used for content generation in AI Studio',
+      'ai_help_model': 'AI model used for student help and assistance',
+      'platform_name': 'Platform display name',
+      'default_language': 'Default content language',
+      'ai_enabled': 'Whether AI content generation is enabled'
+    };
+    return descriptions[key] || '';
   };
 
   if (loading) {
@@ -287,19 +433,25 @@ function AdminSettings() {
               </label>
               <input
                 type="text"
-                defaultValue="Learning Hub"
+                value={platformName}
+                onChange={(e) => setPlatformName(e.target.value)}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter platform name"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
                 Default Language
               </label>
-              <select className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option>English</option>
-                <option>Arabic</option>
-                <option>Spanish</option>
-                <option>French</option>
+              <select 
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="English">English</option>
+                <option value="Arabic">Arabic</option>
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
               </select>
             </div>
           </div>
@@ -346,7 +498,12 @@ function AdminSettings() {
                 <div className="text-xs text-slate-500">Allow AI to generate course content</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="sr-only peer" />
+                <input 
+                  type="checkbox" 
+                  checked={aiEnabled}
+                  onChange={(e) => setAiEnabled(e.target.checked)}
+                  className="sr-only peer" 
+                />
                 <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>

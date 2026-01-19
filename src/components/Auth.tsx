@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { GraduationCap, Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 
 interface AuthProps {
   onAuthSuccess: (userId: string) => void;
@@ -59,9 +59,11 @@ export function Auth({ onAuthSuccess }: AuthProps) {
 
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
-            <GraduationCap className="w-8 h-8 text-white" />
-          </div>
+          <img
+            src="https://res.cloudinary.com/dujh5xuoi/image/upload/v1754423073/%D8%AA%D8%B9%D9%84%D9%91%D9%85_AIFinal_edvr4e.png"
+            alt="Platform logo"
+            className="max-h-16 w-auto object-contain mx-auto mb-4"
+          />
           <h1 className="text-3xl font-bold text-white mb-2">Learning Hub</h1>
           <p className="text-slate-400">Master AI through interactive journeys</p>
         </div>
