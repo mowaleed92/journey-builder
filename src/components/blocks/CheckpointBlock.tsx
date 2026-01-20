@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Flag, CheckCircle, AlertTriangle, ArrowRight, RotateCcw } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { CheckpointBlockContent, Facts } from '../../types/database';
 
 interface CheckpointBlockProps {
@@ -10,6 +11,7 @@ interface CheckpointBlockProps {
 }
 
 export function CheckpointBlock({ content, facts, onComplete, allowRetry = true }: CheckpointBlockProps) {
+  const { t } = useTranslation();
   const [evaluation, setEvaluation] = useState<{
     passed: boolean;
     score?: number;
@@ -30,27 +32,27 @@ export function CheckpointBlock({ content, facts, onComplete, allowRetry = true 
       const weakTopics = facts['quiz.weakTopics'] as string[] | undefined;
 
       let passed = true;
-      let message = 'Great progress! You can continue to the next section.';
+      let message = t('blocks.checkpoint.messages.greatProgress');
 
       if (score !== undefined) {
         if (score >= 70) {
           passed = true;
-          message = `Excellent work! You scored ${score}% and demonstrated strong understanding.`;
+          message = t('blocks.checkpoint.messages.excellentWork', { score });
         } else if (score >= 50) {
           passed = true;
-          message = `Good job! You scored ${score}%. You can continue, but consider reviewing the material.`;
+          message = t('blocks.checkpoint.messages.goodJob', { score });
         } else {
           passed = false;
-          message = `You scored ${score}%. Let's review the concepts you found challenging.`;
+          message = t('blocks.checkpoint.messages.needsReview', { score });
         }
       }
 
       if (!passed && attemptsCount && attemptsCount >= 3) {
-        message = `After ${attemptsCount} attempts, let's take a different approach and get some personalized help.`;
+        message = t('blocks.checkpoint.messages.multipleAttempts', { attempts: attemptsCount });
       }
 
       if (!passed && weakTopics && weakTopics.length > 0) {
-        message += ` We'll focus on: ${weakTopics.join(', ')}.`;
+        message += ' ' + t('blocks.checkpoint.messages.focusOn', { topics: weakTopics.join('، ') });
       }
 
       setEvaluation({ passed, score, message });
@@ -75,8 +77,8 @@ export function CheckpointBlock({ content, facts, onComplete, allowRetry = true 
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-blue-100 flex items-center justify-center animate-pulse">
             <Flag className="w-10 h-10 text-blue-600" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Evaluating Progress</h2>
-          <p className="text-slate-500">Checking your understanding...</p>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">{t('blocks.checkpoint.evaluating')}</h2>
+          <p className="text-slate-500">{t('blocks.checkpoint.checkingUnderstanding')}</p>
 
           <div className="mt-8 flex items-center justify-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -126,7 +128,7 @@ export function CheckpointBlock({ content, facts, onComplete, allowRetry = true 
                 >
                   {evaluation.score}%
                 </div>
-                <div className="text-sm text-slate-500 mt-1">Your Score</div>
+                <div className="text-sm text-slate-500 mt-1">{t('blocks.checkpoint.yourScore')}</div>
               </div>
             )}
 
@@ -146,7 +148,7 @@ export function CheckpointBlock({ content, facts, onComplete, allowRetry = true 
                   : 'bg-amber-500 text-white hover:bg-amber-600'
               }`}
             >
-              {evaluation.passed ? 'Continue' : 'Get Help'}
+              {evaluation.passed ? t('blocks.checkpoint.continue') : t('blocks.checkpoint.getHelp')}
               <ArrowRight className="w-5 h-5" />
             </button>
 
@@ -156,7 +158,7 @@ export function CheckpointBlock({ content, facts, onComplete, allowRetry = true 
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
               >
                 <RotateCcw className="w-5 h-5" />
-                Try Again
+                {t('blocks.checkpoint.tryAgain')}
               </button>
             )}
           </div>

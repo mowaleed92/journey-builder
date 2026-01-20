@@ -49,7 +49,7 @@ export function ImageBlock({ content, onComplete, isCompleted }: ImageBlockProps
               {hasError ? (
                 <div className="flex flex-col items-center justify-center py-12 bg-slate-100 rounded-xl">
                   <Image className="w-12 h-12 text-slate-400 mb-4" />
-                  <p className="text-slate-500">Failed to load image</p>
+                  <p className="text-slate-500">{t('blocks.image.failed')}</p>
                 </div>
               ) : (
                 <div className="relative group">
@@ -86,7 +86,7 @@ export function ImageBlock({ content, onComplete, isCompleted }: ImageBlockProps
           ) : (
             <div className="flex flex-col items-center justify-center py-12 bg-slate-100 rounded-xl">
               <Image className="w-12 h-12 text-slate-400 mb-4" />
-              <p className="text-slate-500">No image set</p>
+              <p className="text-slate-500">{t('blocks.image.noImage')}</p>
             </div>
           )}
         </div>

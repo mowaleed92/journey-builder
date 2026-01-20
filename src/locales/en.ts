@@ -76,6 +76,7 @@ export const en = {
       congratulations: 'Congratulations! You\'ve successfully completed this learning journey.',
       backToDashboard: 'Back to Dashboard',
       restart: 'Restart Journey',
+      continueToNext: 'Continue to: {module}',
       
       stats: {
         blocksCompleted: 'Blocks Completed',
@@ -107,6 +108,8 @@ export const en = {
     image: {
       loading: 'Loading image...',
       continue: 'Continue',
+      failed: 'Failed to load image',
+      noImage: 'No image set',
     },
     
     quiz: {
@@ -139,6 +142,27 @@ export const en = {
       submit: 'Submit Mission',
       answer: 'Your Answer',
       answerPlaceholder: 'Enter your answer here...',
+      inputPlaceholder: 'Type your answer here...',
+      tryAgain: 'Try Again',
+      yourMission: 'Your Mission',
+      missionDescription: 'Complete the following steps to proceed. This is a hands-on activity that will help reinforce your learning.',
+      openExternal: 'Open external resource',
+      step: 'Step',
+      aiValidated: 'AI Validated',
+      checking: 'Checking...',
+      submitAnswer: 'Submit Answer',
+      correct: 'Correct!',
+      notQuiteRight: 'Not quite right',
+      score: 'Score',
+      attemptsMade: '{count} attempt made',
+      attemptsMadePlural: '{count} attempts made',
+      uploadScreenshot: 'Upload screenshot',
+      screenshotUploaded: 'Screenshot uploaded',
+      pasteUrl: 'Paste URL here...',
+      stepsCompleted: '{completed} of {total} steps completed',
+      readyToContinue: 'Ready to continue!',
+      completeAllSteps: 'Complete all steps',
+      unableToValidate: 'Unable to validate your answer. Please try again.',
     },
     
     form: {
@@ -160,6 +184,18 @@ export const en = {
       inputPlaceholder: 'Ask your question here...',
       thinking: 'Thinking...',
       continue: 'Continue',
+      loadingAssistant: 'Loading AI assistant...',
+      aiPowered: 'AI-powered learning assistance',
+      unavailable: 'AI Assistant Unavailable',
+      unavailableMessage: 'The AI help feature is currently disabled. You can continue with the course by clicking the button below.',
+      personalizedHelp: 'Personalized help based on your quiz results',
+      guidedLearning: 'Interactive guided learning',
+      askAnything: 'Ask me anything about the material',
+      askQuestion: 'Ask a question about the concepts...',
+      continueConversation: 'Continue the conversation...',
+      reachedLimit: 'You\'ve reached the conversation limit. Click continue to proceed.',
+      messages: 'messages',
+      askMoreToontinue: 'ask at least {count} more to continue',
     },
     
     checkpoint: {
@@ -169,6 +205,19 @@ export const en = {
       passedMessage: 'You met the requirements. Continue!',
       failedMessage: 'You haven\'t met the requirements yet.',
       continue: 'Continue',
+      evaluating: 'Evaluating Progress',
+      checkingUnderstanding: 'Checking your understanding...',
+      yourScore: 'Your Score',
+      getHelp: 'Get Help',
+      tryAgain: 'Try Again',
+      messages: {
+        greatProgress: 'Great progress! You can continue to the next section.',
+        excellentWork: 'Excellent work! You scored {score}% and demonstrated strong understanding.',
+        goodJob: 'Good job! You scored {score}%. You can continue, but consider reviewing the material.',
+        needsReview: 'You scored {score}%. Let\'s review the concepts you found challenging.',
+        multipleAttempts: 'After {attempts} attempts, let\'s take a different approach and get some personalized help.',
+        focusOn: 'We\'ll focus on: {topics}.',
+      },
     },
     
     animation: {
@@ -191,6 +240,15 @@ export const en = {
       showSolution: 'Show Solution',
       hideSolution: 'Hide Solution',
       submit: 'Submit Solution',
+      problem: 'Problem',
+      hideHints: 'Hide hints',
+      showHints: 'Show hints',
+      hide: 'Hide',
+      show: 'Show',
+      explanation: 'Explanation',
+      solutionWritten: 'Solution written',
+      solutionViewed: 'Solution viewed',
+      writeOrView: 'Write your solution or view the answer',
     },
     
     resource: {

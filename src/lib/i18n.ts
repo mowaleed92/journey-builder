@@ -25,16 +25,25 @@ function getNestedValue(obj: any, path: string): string {
   return typeof current === 'string' ? current : path;
 }
 
-// Translation function
-export function t(key: string, locale: Locale = 'ar'): string {
+// Translation function with variable interpolation support
+export function t(key: string, locale: Locale = 'ar', vars?: Record<string, string | number>): string {
   const translation = translations[locale];
-  return getNestedValue(translation, key);
+  let result = getNestedValue(translation, key);
+  
+  // Replace variables like {score}, {module}, etc.
+  if (vars && typeof result === 'string') {
+    Object.keys(vars).forEach(varKey => {
+      result = result.replace(new RegExp(`\\{${varKey}\\}`, 'g'), String(vars[varKey]));
+    });
+  }
+  
+  return result;
 }
 
 // Hook for using translations in components
 export function useTranslation(locale: Locale = 'ar') {
   return {
-    t: (key: string) => t(key, locale),
+    t: (key: string, vars?: Record<string, string | number>) => t(key, locale, vars),
     locale,
     dir: locale === 'ar' ? 'rtl' : 'ltr',
     isRTL: locale === 'ar',

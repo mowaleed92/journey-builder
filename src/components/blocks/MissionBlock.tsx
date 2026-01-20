@@ -122,7 +122,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
         ...prev,
         [step.id]: {
           correct: false,
-          feedback: 'Unable to validate your answer. Please try again.',
+          feedback: t('blocks.mission.unableToValidate'),
           score: 0,
         },
       }));
@@ -158,7 +158,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                   <textarea
                     value={stepInputs[step.id] || ''}
                     onChange={(e) => handleInputChange(step.id, e.target.value)}
-                    placeholder="Type your answer here..."
+                    placeholder={t('blocks.mission.inputPlaceholder')}
                     rows={4}
                     disabled={isValidating}
                     className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-400"
@@ -168,7 +168,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                     type="text"
                     value={stepInputs[step.id] || ''}
                     onChange={(e) => handleInputChange(step.id, e.target.value)}
-                    placeholder="Type your answer here..."
+                    placeholder={t('blocks.mission.inputPlaceholder')}
                     disabled={isValidating}
                     className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-400"
                   />
@@ -182,12 +182,12 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                   {isValidating ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Checking...
+                      {t('blocks.mission.checking')}
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      Submit Answer
+                      {t('blocks.mission.submitAnswer')}
                     </>
                   )}
                 </button>
@@ -216,7 +216,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                           result.correct ? 'text-success' : 'text-error'
                         }`}
                       >
-                        {result.correct ? 'Correct!' : 'Not quite right'}
+                        {result.correct ? t('blocks.mission.correct') : t('blocks.mission.notQuiteRight')}
                       </span>
                       <span
                         className={`text-sm px-2 py-0.5 rounded ${
@@ -225,7 +225,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                             : 'bg-error/20 text-error'
                         }`}
                       >
-                        Score: {result.score}%
+                        {t('blocks.mission.score')}: {result.score}%
                       </span>
                     </div>
                     <p
@@ -242,7 +242,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                         className="mt-3 flex items-center gap-1 text-sm text-error hover:text-error/80 font-medium"
                       >
                         <RotateCcw className="w-4 h-4" />
-                        Try Again
+                        {t('blocks.mission.tryAgain')}
                       </button>
                     )}
                   </div>
@@ -253,7 +253,9 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
             {/* Attempt counter */}
             {attempts > 0 && (
               <div className="text-xs text-slate-500">
-                {attempts} attempt{attempts !== 1 ? 's' : ''} made
+                {attempts === 1 
+                  ? t('blocks.mission.attemptsMade', { count: attempts })
+                  : t('blocks.mission.attemptsMadePlural', { count: attempts })}
               </div>
             )}
           </div>
@@ -264,7 +266,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
           <div className="mt-2">
             <label className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer text-sm text-slate-600 transition-colors w-fit">
               <Upload className="w-4 h-4" />
-              {screenshotUploaded ? 'Screenshot uploaded' : 'Upload screenshot'}
+              {screenshotUploaded ? t('blocks.mission.screenshotUploaded') : t('blocks.mission.uploadScreenshot')}
               <input
                 type="file"
                 accept="image/*"
@@ -283,7 +285,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
           <div className="mt-2">
             <input
               type="url"
-              placeholder="Paste URL here..."
+              placeholder={t('blocks.mission.pasteUrl')}
               className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               onChange={(e) => {
                 if (e.target.value) {
@@ -318,9 +320,9 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-6 mb-6">
-            <h3 className="font-semibold text-orange-900 mb-2">Your Mission</h3>
+            <h3 className="font-semibold text-orange-900 mb-2">{t('blocks.mission.yourMission')}</h3>
             <p className="text-orange-800">
-              Complete the following steps to proceed. This is a hands-on activity that will help reinforce your learning.
+              {t('blocks.mission.missionDescription')}
             </p>
           </div>
 
@@ -335,7 +337,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                 <ExternalLink className="w-5 h-5 text-primary-600" />
               </div>
               <div className="flex-1">
-                <div className="font-medium text-primary-900">Open external resource</div>
+                <div className="font-medium text-primary-900">{t('blocks.mission.openExternal')}</div>
                 <div className="text-sm text-primary-600 truncate">{content.externalUrl}</div>
               </div>
               <ChevronRight className="w-5 h-5 text-primary-400 group-hover:translate-x-1 transition-transform" />
@@ -381,11 +383,11 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-500">
-                          Step {index + 1}
+                          {t('blocks.mission.step')} {index + 1}
                         </span>
                         {step.verificationMethod === 'ai_validate' && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
-                            AI Validated
+                            {t('blocks.mission.aiValidated')}
                           </span>
                         )}
                       </div>
@@ -417,14 +419,14 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
       <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-slate-500">
-            {completedSteps.size} of {content.steps.length} steps completed
+            {t('blocks.mission.stepsCompleted', { completed: completedSteps.size, total: content.steps.length })}
           </span>
           <span
             className={`text-sm font-medium ${
               allStepsCompleted ? 'text-emerald-600' : 'text-slate-400'
             }`}
           >
-            {allStepsCompleted ? 'Ready to continue!' : 'Complete all steps'}
+            {allStepsCompleted ? t('blocks.mission.readyToContinue') : t('blocks.mission.completeAllSteps')}
           </span>
         </div>
 
@@ -437,7 +439,7 @@ export function MissionBlock({ content, onComplete, previousOutput }: MissionBlo
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
         >
-          Continue
+          {t('blocks.continue')}
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>

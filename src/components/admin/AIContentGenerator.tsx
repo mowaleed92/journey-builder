@@ -19,7 +19,11 @@ import {
   FileText,
   Bot,
   Flag,
-  Play
+  Play,
+  AlertTriangle,
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useAIEnabled, AIDisabledMessage } from '../../hooks/useAIEnabled';
 import type { GraphDefinition } from '../../types/database';
@@ -41,11 +45,66 @@ interface AIContentGeneratorProps {
   currentModuleId?: string;
 }
 
+// Helper function to format the context preview (matching the edge function format)
+function formatContextPreview(trackModulesContext: TrackModuleContext[]): string {
+  const currentModule = trackModulesContext.find(m => m.isCurrent);
+  const previousModules = trackModulesContext.filter(
+    m => !m.isCurrent && m.orderIndex < (currentModule?.orderIndex ?? 999) && m.graph?.blocks?.length
+  );
+  
+  if (previousModules.length === 0) {
+    return 'No previous module content available.';
+  }
+  
+  let preview = '';
+  const totalModules = trackModulesContext.length;
+  
+  previousModules.forEach((module) => {
+    preview += `\n${'═'.repeat(60)}\n`;
+    preview += `MODULE ${module.orderIndex + 1} of ${totalModules}: "${module.title}"\n`;
+    if (module.description) {
+      preview += `Description: ${module.description}\n`;
+    }
+    preview += `${'═'.repeat(60)}\n\n`;
+    
+    if (module.graph && module.graph.blocks && module.graph.blocks.length > 0) {
+      module.graph.blocks.forEach((block, index) => {
+        const content = block.content as Record<string, unknown>;
+        preview += `Block ${index + 1} [${block.type.toUpperCase()}] "${content.title || 'Untitled'}"\n`;
+        preview += '---\n';
+        
+        if (block.type === 'read' && content.markdown) {
+          const markdown = content.markdown as string;
+          preview += markdown.length > 500 ? `${markdown.substring(0, 500)}...\n` : `${markdown}\n`;
+        } else if (block.type === 'quiz' && Array.isArray(content.questions)) {
+          preview += `Quiz with ${content.questions.length} questions\n`;
+          (content.questions as Array<{prompt: string}>).slice(0, 2).forEach((q, qIdx) => {
+            preview += `  ${qIdx + 1}. ${q.prompt}\n`;
+          });
+          if (content.questions.length > 2) {
+            preview += `  ... and ${content.questions.length - 2} more questions\n`;
+          }
+        } else if (block.type === 'code' && content.code) {
+          preview += `Language: ${content.language}\nCode snippet (${(content.code as string).split('\n').length} lines)\n`;
+        } else if (block.type === 'mission' && Array.isArray(content.steps)) {
+          preview += `Mission with ${content.steps.length} steps\n`;
+        } else if (content.description) {
+          preview += `${content.description}\n`;
+        }
+        preview += '---\n\n';
+      });
+    }
+  });
+  
+  return preview.trim();
+}
+
 export function AIContentGenerator({ onGenerate, onClose, existingGraph, trackModulesContext = [], currentModuleId }: AIContentGeneratorProps) {
   const { enabled: aiEnabled, contentModel, isLoading: aiSettingsLoading } = useAIEnabled();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [showContextPreview, setShowContextPreview] = useState(false);
 
   const [topic, setTopic] = useState('');
   const [targetAudience, setTargetAudience] = useState('beginners');
@@ -180,27 +239,123 @@ export function AIContentGenerator({ onGenerate, onClose, existingGraph, trackMo
             </div>
           ) : step === 1 && (
             <div className="space-y-6">
-              {trackModulesContext.length > 1 && (
-                <div className="flex items-start gap-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="font-medium text-purple-300 mb-1">Track-Aware Generation</div>
-                    <div className="text-sm text-slate-400 mb-2">
-                      AI will reference FULL content from {trackModulesContext.filter(m => !m.isCurrent).length} other module{trackModulesContext.filter(m => !m.isCurrent).length !== 1 ? 's' : ''} in this track to ensure progressive learning.
-                    </div>
-                    <div className="space-y-1">
-                      {trackModulesContext.map((module) => (
-                        <div key={module.moduleId} className={`text-xs flex items-center gap-2 ${module.isCurrent ? 'text-purple-300 font-medium' : 'text-slate-500'}`}>
-                          <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                          Module {module.orderIndex + 1}: {module.title}
-                          {module.graph && ` (${module.graph.blocks?.length || 0} blocks)`}
-                          {module.isCurrent && ' (Current)'}
+              {trackModulesContext.length > 1 && (() => {
+                const currentModule = trackModulesContext.find(m => m.isCurrent);
+                const previousModules = trackModulesContext.filter(
+                  m => !m.isCurrent && m.orderIndex < (currentModule?.orderIndex ?? 999)
+                );
+                const previousModulesWithContent = previousModules.filter(m => m.graph?.blocks?.length);
+                const emptyPreviousModules = previousModules.filter(m => !m.graph?.blocks?.length);
+                const hasWarning = emptyPreviousModules.length > 0 && previousModules.length > 0;
+                
+                return (
+                  <div className="space-y-3">
+                    {/* Main track-aware notice */}
+                    <div className={`flex items-start gap-3 p-4 border rounded-xl ${
+                      hasWarning 
+                        ? 'bg-amber-500/10 border-amber-500/20' 
+                        : 'bg-purple-500/10 border-purple-500/20'
+                    }`}>
+                      {hasWarning ? (
+                        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <div className={`font-medium mb-1 ${hasWarning ? 'text-amber-300' : 'text-purple-300'}`}>
+                          Track-Aware Generation
                         </div>
-                      ))}
+                        
+                        {previousModulesWithContent.length > 0 ? (
+                          <div className="text-sm text-slate-400 mb-2">
+                            AI will reference FULL content from {previousModulesWithContent.length} previous module{previousModulesWithContent.length !== 1 ? 's' : ''} to ensure progressive learning.
+                          </div>
+                        ) : previousModules.length > 0 ? (
+                          <div className="text-sm text-amber-400/80 mb-2">
+                            Warning: No content found in previous modules. AI will generate standalone content.
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-400 mb-2">
+                            This is the first module in the track.
+                          </div>
+                        )}
+                        
+                        {/* Module list with status indicators */}
+                        <div className="space-y-1">
+                          {trackModulesContext.map((module) => {
+                            const isPrevious = !module.isCurrent && module.orderIndex < (currentModule?.orderIndex ?? 999);
+                            const hasContent = module.graph?.blocks?.length;
+                            const blockCount = module.graph?.blocks?.length || 0;
+                            
+                            return (
+                              <div 
+                                key={module.moduleId} 
+                                className={`text-xs flex items-center gap-2 ${
+                                  module.isCurrent 
+                                    ? 'text-purple-300 font-medium' 
+                                    : isPrevious && hasContent
+                                      ? 'text-emerald-400'
+                                      : isPrevious && !hasContent
+                                        ? 'text-amber-400'
+                                        : 'text-slate-500'
+                                }`}
+                              >
+                                {isPrevious && hasContent && <CheckCircle className="w-3 h-3" />}
+                                {isPrevious && !hasContent && <AlertTriangle className="w-3 h-3" />}
+                                {!isPrevious && <div className="w-1.5 h-1.5 rounded-full bg-current ml-0.5" />}
+                                
+                                <span>Module {module.orderIndex + 1}: {module.title}</span>
+                                
+                                {hasContent && <span className="text-slate-500">({blockCount} blocks)</span>}
+                                {isPrevious && !hasContent && <span className="text-amber-400/70">(empty)</span>}
+                                {module.isCurrent && <span className="text-purple-400">(generating)</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Context preview toggle */}
+                        {previousModulesWithContent.length > 0 && (
+                          <button
+                            onClick={() => setShowContextPreview(!showContextPreview)}
+                            className="mt-3 flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            {showContextPreview ? 'Hide' : 'Preview'} AI Context
+                            {showContextPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    
+                    {/* Context preview panel */}
+                    {showContextPreview && previousModulesWithContent.length > 0 && (
+                      <div className="p-4 bg-slate-900/80 border border-slate-700 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-slate-300">Context Preview</h4>
+                          <span className="text-xs text-slate-500">
+                            {formatContextPreview(trackModulesContext).length.toLocaleString()} characters
+                          </span>
+                        </div>
+                        <pre className="text-xs text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono bg-slate-950/50 p-3 rounded-lg">
+                          {formatContextPreview(trackModulesContext)}
+                        </pre>
+                      </div>
+                    )}
+                    
+                    {/* Warning banner for empty modules */}
+                    {hasWarning && (
+                      <div className="flex items-start gap-2 p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs text-amber-300/80">
+                          <span className="font-medium">Tip:</span> For best results, generate or add content to {emptyPreviousModules.map(m => `Module ${m.orderIndex + 1}`).join(', ')} first. 
+                          This ensures the AI can build upon previous concepts.
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {existingGraph && existingGraph.blocks.length > 0 && (
                 <div className="flex items-start gap-3 p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">

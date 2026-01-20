@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dumbbell, ChevronRight, Eye, EyeOff, Lightbulb, CheckCircle } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { ExerciseBlockContent } from '../../types/database';
 
 interface ExerciseBlockProps {
@@ -9,6 +10,7 @@ interface ExerciseBlockProps {
 }
 
 export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseBlockProps) {
+  const { t } = useTranslation();
   const [userSolution, setUserSolution] = useState(previousOutput?.userSolution || '');
   const [showSolution, setShowSolution] = useState(previousOutput?.solutionViewed || false);
   const [hintsViewed, setHintsViewed] = useState(previousOutput?.hintsViewed || 0);
@@ -61,7 +63,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
               <span className="w-6 h-6 rounded-full bg-violet-200 flex items-center justify-center text-xs font-bold text-violet-700">
                 ?
               </span>
-              Problem
+              {t('blocks.exercise.problem')}
             </h3>
             <div className="text-violet-800 whitespace-pre-wrap">{content.problem}</div>
           </div>
@@ -69,13 +71,13 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
           {/* Your Solution */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Your Solution
+              {t('blocks.exercise.yourSolution')}
             </label>
             <textarea
               value={userSolution}
               onChange={(e) => setUserSolution(e.target.value)}
               rows={8}
-              placeholder="Write your solution here..."
+              placeholder={t('blocks.exercise.placeholder')}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none font-mono text-sm"
             />
           </div>
@@ -87,7 +89,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
                 <div className="flex items-center gap-2">
                   <Lightbulb className="w-5 h-5 text-amber-600" />
                   <span className="font-medium text-amber-900">
-                    Hints ({hintsViewed} / {hints.length})
+                    {t('blocks.exercise.hints')} ({hintsViewed} / {hints.length})
                   </span>
                 </div>
                 {hintsViewed < hints.length && (
@@ -95,7 +97,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
                     onClick={handleShowNextHint}
                     className="px-3 py-1.5 text-sm bg-amber-200 text-amber-800 rounded-lg hover:bg-amber-300 transition-colors font-medium"
                   >
-                    Show Hint
+                    {t('blocks.exercise.showHint')}
                   </button>
                 )}
               </div>
@@ -121,7 +123,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
                   onClick={() => setShowHints(!showHints)}
                   className="mt-2 text-sm text-amber-700 hover:text-amber-900"
                 >
-                  {showHints ? 'Hide hints' : 'Show hints'}
+                  {showHints ? t('blocks.exercise.hideHints') : t('blocks.exercise.showHints')}
                 </button>
               )}
             </div>
@@ -135,18 +137,18 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
             >
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
-                <span className="font-medium text-slate-900">Solution</span>
+                <span className="font-medium text-slate-900">{t('blocks.exercise.solution')}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 {showSolution ? (
                   <>
                     <EyeOff className="w-4 h-4" />
-                    Hide
+                    {t('blocks.exercise.hide')}
                   </>
                 ) : (
                   <>
                     <Eye className="w-4 h-4" />
-                    Show
+                    {t('blocks.exercise.show')}
                   </>
                 )}
               </div>
@@ -162,7 +164,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
 
                 {content.solutionExplanation && (
                   <div className="mt-4">
-                    <h4 className="font-medium text-slate-900 mb-2">Explanation</h4>
+                    <h4 className="font-medium text-slate-900 mb-2">{t('blocks.exercise.explanation')}</h4>
                     <p className="text-slate-700 text-sm whitespace-pre-wrap">
                       {content.solutionExplanation}
                     </p>
@@ -178,10 +180,10 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
         <div className="flex items-center justify-between max-w-3xl mx-auto">
           <div className="text-sm text-slate-500">
             {userSolution.trim()
-              ? 'Solution written'
+              ? t('blocks.exercise.solutionWritten')
               : showSolution
-              ? 'Solution viewed'
-              : 'Write your solution or view the answer'}
+              ? t('blocks.exercise.solutionViewed')
+              : t('blocks.exercise.writeOrView')}
           </div>
           <button
             onClick={handleComplete}
@@ -192,7 +194,7 @@ export function ExerciseBlock({ content, onComplete, previousOutput }: ExerciseB
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            Continue
+            {t('blocks.continue')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

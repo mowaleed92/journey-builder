@@ -733,7 +733,7 @@ export function JourneyRunner({
                   className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
                 >
                   <Sparkles className="w-5 h-5" />
-                  Continue to: {nextModuleInfo.moduleTitle}
+                  {t('journey.completion.continueToNext', { module: nextModuleInfo.moduleTitle })}
                 </button>
                 
                 <button

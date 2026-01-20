@@ -4,6 +4,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   useNodesState,
   useEdgesState,
   Connection,
@@ -244,21 +245,41 @@ function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuil
             journey_versions (
               id,
               graph_json,
-              status
+              status,
+              updated_at
             )
           `)
           .eq('track_id', module.track_id)
           .order('order_index');
 
         if (siblingModules && siblingModules.length > 0) {
-          const context: TrackModuleContext[] = siblingModules.map((m: any) => ({
-            moduleId: m.id,
-            title: m.title,
-            description: m.description,
-            orderIndex: m.order_index,
-            isCurrent: m.id === moduleId,
-            graph: m.journey_versions?.[0]?.graph_json as GraphDefinition || null,
-          }));
+          const context: TrackModuleContext[] = siblingModules.map((m: any) => {
+            // Get the best version: prefer published, otherwise most recently updated
+            const versions = m.journey_versions || [];
+            let bestVersion = null;
+            
+            if (versions.length > 0) {
+              // First try to find a published version
+              const publishedVersion = versions.find((v: any) => v.status === 'published');
+              if (publishedVersion) {
+                bestVersion = publishedVersion;
+              } else {
+                // Fall back to most recently updated version
+                bestVersion = versions.sort((a: any, b: any) => 
+                  new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                )[0];
+              }
+            }
+            
+            return {
+              moduleId: m.id,
+              title: m.title,
+              description: m.description,
+              orderIndex: m.order_index,
+              isCurrent: m.id === moduleId,
+              graph: bestVersion?.graph_json as GraphDefinition || null,
+            };
+          });
           setTrackModulesContext(context);
         }
       }
@@ -873,9 +894,10 @@ function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuil
             className="bg-slate-900"
             proOptions={{ hideAttribution: true }}
             deleteKeyCode={['Backspace', 'Delete']}
-            selectionOnDrag
-            panOnDrag={[1, 2]}
-            selectionMode={1}
+            panOnDrag={true}
+            selectionOnDrag={false}
+            panOnScroll={false}
+            zoomOnScroll={true}
           >
             <Background color="#334155" gap={20} size={1} />
             <Controls className="bg-slate-800 border border-slate-700 rounded-lg" />
@@ -905,9 +927,9 @@ function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuil
               className="bg-slate-800 border border-slate-700 rounded-lg"
             />
             
-            {/* Empty state overlay */}
+            {/* Empty state - Using Panel for proper pointer event handling */}
             {graph.blocks.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <Panel position="center" className="pointer-events-none">
                 <div className="text-center pointer-events-auto">
                   <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
                     <Plus className="w-8 h-8 text-slate-600" />
@@ -924,7 +946,7 @@ function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuil
                     Generate with AI
                   </button>
                 </div>
-              </div>
+              </Panel>
             )}
           </ReactFlow>
         </div>

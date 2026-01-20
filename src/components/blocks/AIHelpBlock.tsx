@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, User, Loader2, ChevronRight, Sparkles, AlertTriangle } from 'lucide-react';
 import { useAIEnabled } from '../../hooks/useAIEnabled';
+import { useTranslation } from '../../contexts';
 import type { AIHelpBlockContent } from '../../types/database';
 
 interface AIHelpBlockProps {
@@ -16,6 +17,7 @@ interface Message {
 }
 
 export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }: AIHelpBlockProps) {
+  const { t } = useTranslation();
   const { enabled: aiEnabled, helpModel, isLoading: aiSettingsLoading } = useAIEnabled();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -59,12 +61,12 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
     let contextMessage = '';
 
     if (content.mode === 'targeted_remediation' && wrongQuestions && wrongQuestions.length > 0) {
-      contextMessage = `I noticed you had trouble with some questions. Let me help explain the concepts:\n\n`;
+      contextMessage = `لاحظت أنك واجهت صعوبة في بعض الأسئلة. دعني أساعدك في شرح المفاهيم:\n\n`;
 
       wrongQuestions.slice(0, 3).forEach((q, i) => {
-        contextMessage += `**Question ${i + 1}:** ${q.prompt}\n`;
-        contextMessage += `Your answer: ${q.userAnswer}\n`;
-        contextMessage += `Correct answer: ${q.correctAnswer}\n`;
+        contextMessage += `**السؤال ${i + 1}:** ${q.prompt}\n`;
+        contextMessage += `إجابتك: ${q.userAnswer}\n`;
+        contextMessage += `الإجابة الصحيحة: ${q.correctAnswer}\n`;
         if (q.explanation) {
           contextMessage += `${q.explanation}\n`;
         }
@@ -72,14 +74,14 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
       });
 
       if (weakTopics && weakTopics.length > 0) {
-        contextMessage += `\nThe main topics we should review: **${weakTopics.join(', ')}**\n\n`;
+        contextMessage += `\nالمواضيع الرئيسية التي يجب مراجعتها: **${weakTopics.join('، ')}**\n\n`;
       }
 
-      contextMessage += `Would you like me to explain any of these concepts in more detail? Feel free to ask questions!`;
+      contextMessage += `هل تريد مني شرح أي من هذه المفاهيم بمزيد من التفصيل؟ لا تتردد في طرح الأسئلة!`;
     } else if (content.mode === 'guided_explanation') {
-      contextMessage = `I'm here to help guide you through this material. What would you like me to explain? You can ask about specific concepts or request examples.`;
+      contextMessage = `أنا هنا لمساعدتك في فهم هذه المادة. ماذا تريد مني أن أشرح لك؟ يمكنك السؤال عن مفاهيم محددة أو طلب أمثلة.`;
     } else {
-      contextMessage = `Hi! I'm your AI learning assistant. I'm here to help you understand the material better. What questions do you have?`;
+      contextMessage = `مرحباً! أنا مساعدك الذكي للتعلم. أنا هنا لمساعدتك على فهم المادة بشكل أفضل. ما هي أسئلتك؟`;
     }
 
     const assistantMessage: Message = {
@@ -114,6 +116,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
             weakTopics,
             wrongQuestions,
             model: aiModel,
+            language: 'ar', // Request Arabic responses from AI
           }),
         }
       );
@@ -133,7 +136,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
       const errorMessage: Message = {
         role: 'assistant',
         content:
-          "I apologize, but I'm having trouble connecting right now. Let me provide a brief explanation based on what we've discussed. Please try asking again or continue when ready.",
+          'أعتذر، ولكنني أواجه مشكلة في الاتصال الآن. يرجى المحاولة مرة أخرى أو المتابعة عندما تكون جاهزاً.',
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -157,7 +160,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
     return (
       <div className="flex flex-col h-full bg-slate-900 items-center justify-center">
         <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-        <p className="text-slate-400 mt-4">Loading AI assistant...</p>
+        <p className="text-slate-400 mt-4">{t('blocks.aiHelp.loadingAssistant')}</p>
       </div>
     );
   }
@@ -173,7 +176,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
             </div>
             <div>
               <h2 className="text-xl font-bold text-white">{content.title}</h2>
-              <p className="text-sm text-slate-400">AI-powered learning assistance</p>
+              <p className="text-sm text-slate-400">{t('blocks.aiHelp.aiPowered')}</p>
             </div>
           </div>
         </div>
@@ -182,16 +185,15 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
             <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="w-8 h-8 text-amber-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">AI Assistant Unavailable</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('blocks.aiHelp.unavailable')}</h3>
             <p className="text-slate-400 mb-6">
-              The AI help feature is currently disabled. You can continue with the course
-              by clicking the button below.
+              {t('blocks.aiHelp.unavailableMessage')}
             </p>
             <button
               onClick={() => onComplete({ conversationHistory: [] })}
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors mx-auto"
             >
-              Continue
+              {t('blocks.aiHelp.continue')}
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
@@ -211,10 +213,10 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
             <h2 className="text-xl font-bold text-white">{content.title}</h2>
             <p className="text-sm text-slate-400">
               {content.mode === 'targeted_remediation'
-                ? 'Personalized help based on your quiz results'
+                ? t('blocks.aiHelp.personalizedHelp')
                 : content.mode === 'guided_explanation'
-                ? 'Interactive guided learning'
-                : 'Ask me anything about the material'}
+                ? t('blocks.aiHelp.guidedLearning')
+                : t('blocks.aiHelp.askAnything')}
             </p>
           </div>
         </div>
@@ -294,7 +296,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
               <div className="bg-slate-800 rounded-2xl px-5 py-4">
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
-                  <span className="text-slate-400 text-sm">Thinking...</span>
+                  <span className="text-slate-400 text-sm">{t('blocks.aiHelp.thinking')}</span>
                 </div>
               </div>
             </div>
@@ -316,8 +318,8 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
                   onKeyDown={handleKeyDown}
                   placeholder={
                     userTurns === 0
-                      ? 'Ask a question about the concepts...'
-                      : 'Continue the conversation...'
+                      ? t('blocks.aiHelp.askQuestion')
+                      : t('blocks.aiHelp.continueConversation')
                   }
                   rows={1}
                   className="w-full px-4 py-3 pr-12 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -335,17 +337,17 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
           ) : (
             <div className="text-center py-2 mb-4">
               <p className="text-slate-400 text-sm">
-                You've reached the conversation limit. Click continue to proceed.
+                {t('blocks.aiHelp.reachedLimit')}
               </p>
             </div>
           )}
 
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-500">
-              {userTurns} / {maxTurns} messages
+              {userTurns} / {maxTurns} {t('blocks.aiHelp.messages')}
               {!hasCompletedMinTurns && (
-                <span className="ml-2 text-amber-400">
-                  (ask at least {minTurnsRequired - userTurns} more to continue)
+                <span className="mx-2 text-amber-400">
+                  ({t('blocks.aiHelp.askMoreToontinue', { count: minTurnsRequired - userTurns })})
                 </span>
               )}
             </div>
@@ -359,7 +361,7 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
                   : 'bg-slate-700 text-slate-400 cursor-not-allowed'
               }`}
             >
-              Continue
+              {t('blocks.aiHelp.continue')}
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>

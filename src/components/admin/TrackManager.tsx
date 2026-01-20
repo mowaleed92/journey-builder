@@ -11,6 +11,7 @@ import {
   Search,
   Image,
   X,
+  Upload,
 } from 'lucide-react';
 import type { Track, Module } from '../../types/database';
 import { BulkActionBar } from './BulkActionBar';
@@ -599,6 +600,36 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
   const [level, setLevel] = useState('beginner');
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const { error } = await supabase.storage
+        .from('cover-photos')
+        .upload(filename, file, {
+          contentType: file.type,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from('cover-photos')
+        .getPublicUrl(filename);
+      
+      setCoverImageUrl(data.publicUrl);
+      setShowImagePicker(false);
+    } catch (error) {
+      console.error('Error uploading cover image:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -636,6 +667,36 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
 
             {showImagePicker && !coverImageUrl && (
               <div className="mt-3 space-y-3">
+                {/* File upload option */}
+                <div>
+                  <label className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-slate-900 border border-slate-700 border-dashed rounded-lg text-slate-400 hover:text-white hover:border-slate-500 cursor-pointer transition-colors">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5" />
+                        <span>Upload from device</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-700" />
+                  <span className="text-xs text-slate-500">OR</span>
+                  <div className="flex-1 h-px bg-slate-700" />
+                </div>
+
                 <input
                   type="url"
                   value={coverImageUrl}
@@ -792,6 +853,36 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
   const [level, setLevel] = useState(track.level);
   const [coverImageUrl, setCoverImageUrl] = useState(track.cover_image_url || '');
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const { error } = await supabase.storage
+        .from('cover-photos')
+        .upload(filename, file, {
+          contentType: file.type,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from('cover-photos')
+        .getPublicUrl(filename);
+      
+      setCoverImageUrl(data.publicUrl);
+      setShowImagePicker(false);
+    } catch (error) {
+      console.error('Error uploading cover image:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -829,6 +920,36 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
 
             {showImagePicker && !coverImageUrl && (
               <div className="mt-3 space-y-3">
+                {/* File upload option */}
+                <div>
+                  <label className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-slate-900 border border-slate-700 border-dashed rounded-lg text-slate-400 hover:text-white hover:border-slate-500 cursor-pointer transition-colors">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5" />
+                        <span>Upload from device</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-700" />
+                  <span className="text-xs text-slate-500">OR</span>
+                  <div className="flex-1 h-px bg-slate-700" />
+                </div>
+
                 <input
                   type="url"
                   value={coverImageUrl}

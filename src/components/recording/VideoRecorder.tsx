@@ -21,7 +21,7 @@ type RecordingMode = 'camera' | 'screen' | 'camera_screen';
 type RecordingState = 'idle' | 'preparing' | 'recording' | 'paused' | 'stopped';
 
 interface VideoRecorderProps {
-  onRecordingComplete?: (blob: Blob, mode: RecordingMode) => void;
+  onRecordingComplete?: (blob: Blob, mode: RecordingMode, durationSeconds: number) => void;
   onClose?: () => void;
   showLibrarySave?: boolean;
 }
@@ -43,6 +43,7 @@ export function VideoRecorder({ onRecordingComplete, onClose, showLibrarySave = 
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const isRecordingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -136,7 +137,7 @@ export function VideoRecorder({ onRecordingComplete, onClose, showLibrarySave = 
         canvas.height = 1080;
 
         const drawComposite = () => {
-          if (state === 'stopped') return;
+          if (!isRecordingRef.current) return;
 
           ctx.drawImage(videoPreviewRef.current!, 0, 0, canvas.width, canvas.height);
 
@@ -200,6 +201,7 @@ export function VideoRecorder({ onRecordingComplete, onClose, showLibrarySave = 
       mediaRecorderRef.current = recorder;
       recorder.start(1000);
 
+      isRecordingRef.current = true;
       setState('recording');
       setDuration(0);
       timerRef.current = window.setInterval(() => {
@@ -235,12 +237,14 @@ export function VideoRecorder({ onRecordingComplete, onClose, showLibrarySave = 
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
+      isRecordingRef.current = false;
       mediaRecorderRef.current.stop();
       if (timerRef.current) clearInterval(timerRef.current);
     }
   }, []);
 
   const resetRecording = useCallback(() => {
+    isRecordingRef.current = false;
     setRecordedBlob(null);
     setState('idle');
     setMode(null);
@@ -251,9 +255,9 @@ export function VideoRecorder({ onRecordingComplete, onClose, showLibrarySave = 
 
   const handleSave = useCallback(() => {
     if (recordedBlob && mode && onRecordingComplete) {
-      onRecordingComplete(recordedBlob, mode);
+      onRecordingComplete(recordedBlob, mode, duration);
     }
-  }, [recordedBlob, mode, onRecordingComplete]);
+  }, [recordedBlob, mode, duration, onRecordingComplete]);
 
   const handleDownload = useCallback(() => {
     if (recordedBlob) {

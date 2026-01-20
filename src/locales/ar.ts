@@ -76,6 +76,7 @@ export const ar = {
       congratulations: 'تهانينا! لقد أكملت هذه الرحلة التعليمية بنجاح.',
       backToDashboard: 'العودة إلى لوحة التحكم',
       restart: 'إعادة بدء الرحلة',
+      continueToNext: 'المتابعة إلى: {module}',
       
       stats: {
         blocksCompleted: 'المهام المكتملة',
@@ -107,6 +108,8 @@ export const ar = {
     image: {
       loading: 'جاري تحميل الصورة...',
       continue: 'متابعة',
+      failed: 'فشل تحميل الصورة',
+      noImage: 'لم يتم تعيين صورة',
     },
     
     quiz: {
@@ -139,6 +142,27 @@ export const ar = {
       submit: 'إرسال المهمة',
       answer: 'إجابتك',
       answerPlaceholder: 'أدخل إجابتك هنا...',
+      inputPlaceholder: 'اكتب إجابتك هنا...',
+      tryAgain: 'حاول مرة أخرى',
+      yourMission: 'مهمتك',
+      missionDescription: 'أكمل الخطوات التالية للمتابعة. هذا نشاط عملي سيساعد في تعزيز تعلمك.',
+      openExternal: 'فتح المصدر الخارجي',
+      step: 'الخطوة',
+      aiValidated: 'تم التحقق بالذكاء الاصطناعي',
+      checking: 'جاري التحقق...',
+      submitAnswer: 'إرسال الإجابة',
+      correct: 'صحيح!',
+      notQuiteRight: 'ليس صحيحاً تماماً',
+      score: 'النتيجة',
+      attemptsMade: '{count} محاولة',
+      attemptsMadePlural: '{count} محاولات',
+      uploadScreenshot: 'رفع لقطة الشاشة',
+      screenshotUploaded: 'تم رفع لقطة الشاشة',
+      pasteUrl: 'الصق الرابط هنا...',
+      stepsCompleted: '{completed} من {total} خطوات مكتملة',
+      readyToContinue: 'جاهز للمتابعة!',
+      completeAllSteps: 'أكمل جميع الخطوات',
+      unableToValidate: 'غير قادر على التحقق من إجابتك. يرجى المحاولة مرة أخرى.',
     },
     
     form: {
@@ -160,6 +184,18 @@ export const ar = {
       inputPlaceholder: 'اسأل سؤالك هنا...',
       thinking: 'جاري التفكير...',
       continue: 'متابعة',
+      loadingAssistant: 'جاري تحميل المساعد الذكي...',
+      aiPowered: 'مساعدة تعليمية مدعومة بالذكاء الاصطناعي',
+      unavailable: 'المساعد الذكي غير متاح',
+      unavailableMessage: 'ميزة المساعدة الذكية معطلة حالياً. يمكنك المتابعة في الدورة بالنقر على الزر أدناه.',
+      personalizedHelp: 'مساعدة مخصصة بناءً على نتائج الاختبار',
+      guidedLearning: 'تعلم تفاعلي موجه',
+      askAnything: 'اسألني أي شيء عن المادة',
+      askQuestion: 'اطرح سؤالاً عن المفاهيم...',
+      continueConversation: 'تابع المحادثة...',
+      reachedLimit: 'لقد وصلت إلى الحد الأقصى للمحادثة. انقر متابعة للمتابعة.',
+      messages: 'رسائل',
+      askMoreToontinue: 'اطرح {count} سؤال إضافي على الأقل للمتابعة',
     },
     
     checkpoint: {
@@ -169,6 +205,19 @@ export const ar = {
       passedMessage: 'لقد استوفيت المتطلبات. استمر!',
       failedMessage: 'لم تستوف المتطلبات بعد.',
       continue: 'متابعة',
+      evaluating: 'جاري تقييم تقدمك',
+      checkingUnderstanding: 'جاري التحقق من فهمك...',
+      yourScore: 'نتيجتك',
+      getHelp: 'احصل على مساعدة',
+      tryAgain: 'حاول مرة أخرى',
+      messages: {
+        greatProgress: 'تقدم رائع! يمكنك المتابعة إلى القسم التالي.',
+        excellentWork: 'عمل ممتاز! لقد حصلت على {score}% وأظهرت فهماً قوياً.',
+        goodJob: 'أحسنت! لقد حصلت على {score}%. يمكنك المتابعة، لكن ننصح بمراجعة المادة.',
+        needsReview: 'لقد حصلت على {score}%. لنراجع المفاهيم التي وجدتها صعبة.',
+        multipleAttempts: 'بعد {attempts} محاولات، لنجرب طريقة مختلفة ونحصل على مساعدة شخصية.',
+        focusOn: 'سنركز على: {topics}.',
+      },
     },
     
     animation: {
@@ -191,6 +240,15 @@ export const ar = {
       showSolution: 'إظهار الحل',
       hideSolution: 'إخفاء الحل',
       submit: 'إرسال الحل',
+      problem: 'المشكلة',
+      hideHints: 'إخفاء التلميحات',
+      showHints: 'إظهار التلميحات',
+      hide: 'إخفاء',
+      show: 'إظهار',
+      explanation: 'الشرح',
+      solutionWritten: 'تم كتابة الحل',
+      solutionViewed: 'تم عرض الحل',
+      writeOrView: 'اكتب حلك أو اعرض الإجابة',
     },
     
     resource: {

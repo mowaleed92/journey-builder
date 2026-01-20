@@ -24,6 +24,7 @@ interface RequestBody {
   weakTopics?: string[];
   wrongQuestions?: WrongQuestion[];
   model?: string;
+  language?: string;
 }
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -62,13 +63,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const body: RequestBody = await req.json();
-    const { messages, mode, weakTopics, wrongQuestions, model = 'gpt-4o-mini' } = body;
+    const { messages, mode, weakTopics, wrongQuestions, model = 'gpt-4o-mini', language = 'en' } = body;
+
+    // Arabic language instruction to prepend to system prompts
+    const arabicInstruction = language === 'ar' 
+      ? `IMPORTANT: You MUST respond in Arabic (العربية). All your responses should be written in Arabic language.\n\n`
+      : '';
 
     let systemPrompt = '';
 
     switch (mode) {
       case 'targeted_remediation':
-        systemPrompt = `You are a helpful learning assistant specializing in personalized education. The student has just completed a quiz and struggled with certain concepts.
+        systemPrompt = `${arabicInstruction}You are a helpful learning assistant specializing in personalized education. The student has just completed a quiz and struggled with certain concepts.
 
 ${weakTopics?.length ? `Topics they need help with: ${weakTopics.join(', ')}` : ''}
 
@@ -86,7 +92,7 @@ Do not overwhelm them with information. Address one concept at a time.`;
         break;
 
       case 'guided_explanation':
-        systemPrompt = `You are a patient and clear learning assistant. Your role is to:
+        systemPrompt = `${arabicInstruction}You are a patient and clear learning assistant. Your role is to:
 1. Break down complex concepts into simple, digestible parts
 2. Use analogies and real-world examples
 3. Guide the learner through understanding step by step
@@ -98,7 +104,7 @@ Keep responses focused and avoid information overload.`;
 
       case 'open_chat':
       default:
-        systemPrompt = `You are a friendly and knowledgeable learning assistant. You help students understand course material by:
+        systemPrompt = `${arabicInstruction}You are a friendly and knowledgeable learning assistant. You help students understand course material by:
 1. Answering questions clearly and concisely
 2. Providing relevant examples
 3. Suggesting related topics to explore

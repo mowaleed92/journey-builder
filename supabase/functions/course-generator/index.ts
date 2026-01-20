@@ -175,79 +175,115 @@ Deno.serve(async (req: Request) => {
       const previousModules = trackModulesContext.filter(m => !m.isCurrent && m.orderIndex < (currentModule?.orderIndex ?? 999));
 
       if (previousModules.length > 0) {
-        trackContext = '\n\n═══════════════════════════════════════════════════════════════\n';
-        trackContext += `TRACK LEARNING PROGRESSION (FULL CONTENT):\n`;
-        trackContext += `This is Module ${(currentModule?.orderIndex ?? 0) + 1} of ${totalModules} in the track.\n`;
-        trackContext += `Here is the COMPLETE content from previous modules:\n`;
-        trackContext += '═══════════════════════════════════════════════════════════════\n\n';
+        // Header section
+        trackContext = '\n\n' + '='.repeat(70) + '\n';
+        trackContext += 'LEARNING TRACK CONTEXT - CONTINUATION MODE\n';
+        trackContext += '='.repeat(70) + '\n\n';
+        
+        trackContext += `>> You are generating Module ${(currentModule?.orderIndex ?? 0) + 1} of ${totalModules} in a learning track.\n`;
+        trackContext += `>> The learner has ALREADY completed the content below.\n`;
+        trackContext += `>> Your content MUST continue from where they left off.\n\n`;
 
+        // Process each previous module
         previousModules.forEach((module) => {
-          trackContext += `\n═══════════════════════════════════════════════════════════════\n`;
-          trackContext += `MODULE ${module.orderIndex + 1} of ${totalModules}: "${module.title}"\n`;
+          trackContext += '-'.repeat(70) + '\n';
+          trackContext += `COMPLETED MODULE ${module.orderIndex + 1}: "${module.title}"\n`;
           if (module.description) {
-            trackContext += `Description: ${module.description}\n`;
+            trackContext += `Learning Goal: ${module.description}\n`;
           }
-          trackContext += `═══════════════════════════════════════════════════════════════\n\n`;
+          trackContext += '-'.repeat(70) + '\n\n';
+
+          // Track key concepts and skills taught
+          const conceptsTaught: string[] = [];
+          const skillsPracticed: string[] = [];
 
           if (module.graph && module.graph.blocks && module.graph.blocks.length > 0) {
             module.graph.blocks.forEach((block, index) => {
               const content = block.content as Record<string, unknown>;
-              trackContext += `Block ${index + 1} [${block.type.toUpperCase()}] "${content.title || 'Untitled'}"\n`;
-              trackContext += '---\n';
+              const title = content.title as string || 'Untitled';
+              
+              trackContext += `[${block.type.toUpperCase()}] ${title}\n`;
 
-              // Include FULL content (not previews)
+              // Include FULL content based on type
               if (block.type === 'read' && content.markdown) {
+                trackContext += '```markdown\n';
                 trackContext += `${content.markdown}\n`;
+                trackContext += '```\n';
+                // Extract potential concepts from headers
+                const headers = (content.markdown as string).match(/^#{1,3}\s+(.+)$/gm) || [];
+                headers.forEach(h => conceptsTaught.push(h.replace(/^#+\s+/, '')));
               } else if (block.type === 'quiz' && Array.isArray(content.questions)) {
-                trackContext += `Quiz with ${content.questions.length} questions:\n`;
+                trackContext += `Assessment (${content.questions.length} questions):\n`;
                 content.questions.forEach((q: any, qIdx: number) => {
-                  trackContext += `${qIdx + 1}. ${q.prompt}\n`;
-                  trackContext += `   Choices: ${q.choices?.join(', ')}\n`;
-                  trackContext += `   Correct Answer: ${q.choices?.[q.correctIndex]}\n`;
+                  trackContext += `  Q${qIdx + 1}: ${q.prompt}\n`;
+                  trackContext += `      Answer: ${q.choices?.[q.correctIndex]}\n`;
                   if (q.explanation) {
-                    trackContext += `   Explanation: ${q.explanation}\n`;
+                    trackContext += `      Why: ${q.explanation}\n`;
+                  }
+                  // Quiz tags often indicate key topics
+                  if (q.tags && Array.isArray(q.tags)) {
+                    q.tags.forEach((tag: string) => {
+                      if (!conceptsTaught.includes(tag)) conceptsTaught.push(tag);
+                    });
                   }
                 });
               } else if (block.type === 'code' && content.code) {
-                trackContext += `Language: ${content.language}\n`;
-                trackContext += '```\n';
+                trackContext += `Code Example (${content.language}):\n`;
+                trackContext += '```' + (content.language || '') + '\n';
                 trackContext += `${content.code}\n`;
                 trackContext += '```\n';
                 if (content.description) {
-                  trackContext += `Description: ${content.description}\n`;
+                  trackContext += `Explanation: ${content.description}\n`;
                 }
+                skillsPracticed.push(`${content.language} coding`);
               } else if (block.type === 'mission' && Array.isArray(content.steps)) {
-                trackContext += `Mission with ${content.steps.length} steps:\n`;
+                trackContext += `Hands-on Task (${content.steps.length} steps):\n`;
                 content.steps.forEach((step: any, sIdx: number) => {
-                  trackContext += `${sIdx + 1}. ${step.instruction}\n`;
+                  trackContext += `  ${sIdx + 1}. ${step.instruction}\n`;
                 });
+                skillsPracticed.push(title);
               } else if (block.type === 'exercise' && content.problem) {
-                trackContext += `Problem: ${content.problem}\n`;
-                if (Array.isArray(content.hints) && content.hints.length > 0) {
-                  trackContext += `Hints: ${content.hints.join('; ')}\n`;
-                }
+                trackContext += `Practice Problem: ${content.problem}\n`;
                 if (content.solution) {
                   trackContext += `Solution: ${content.solution}\n`;
                 }
+                skillsPracticed.push('Problem solving');
+              } else if (block.type === 'video' && content.description) {
+                trackContext += `Video: ${content.description}\n`;
               } else if (content.description) {
                 trackContext += `${content.description}\n`;
               }
-              trackContext += '---\n\n';
+              trackContext += '\n';
             });
+            
+            // Add summary of what was learned in this module
+            if (conceptsTaught.length > 0 || skillsPracticed.length > 0) {
+              trackContext += `\n>> MODULE ${module.orderIndex + 1} SUMMARY:\n`;
+              if (conceptsTaught.length > 0) {
+                trackContext += `   Concepts Covered: ${[...new Set(conceptsTaught)].slice(0, 10).join(', ')}\n`;
+              }
+              if (skillsPracticed.length > 0) {
+                trackContext += `   Skills Practiced: ${[...new Set(skillsPracticed)].join(', ')}\n`;
+              }
+              trackContext += '\n';
+            }
           } else {
-            trackContext += '(No content yet)\n\n';
+            trackContext += '(Module has no content yet)\n\n';
           }
         });
 
-        trackContext += '\n═══════════════════════════════════════════════════════════════\n';
-        trackContext += `MODULE ${(currentModule?.orderIndex ?? 0) + 1} of ${totalModules}: "${currentModule?.title || 'Current Module'}" (CURRENT - YOU ARE GENERATING THIS)\n`;
-        trackContext += '═══════════════════════════════════════════════════════════════\n\n';
-        trackContext += 'CRITICAL INSTRUCTIONS:\n';
-        trackContext += '- You have access to the COMPLETE content above - use it to ensure continuity\n';
-        trackContext += '- Build upon concepts already taught (don\'t re-explain basics)\n';
-        trackContext += '- Reference specific content from previous modules where appropriate\n';
-        trackContext += '- Do NOT repeat information already covered\n';
-        trackContext += '- Progress to more advanced topics that logically follow\n\n';
+        // Current module header with explicit instructions
+        trackContext += '\n' + '='.repeat(70) + '\n';
+        trackContext += `NOW GENERATING: MODULE ${(currentModule?.orderIndex ?? 0) + 1} - "${currentModule?.title || 'Current Module'}"\n`;
+        trackContext += '='.repeat(70) + '\n\n';
+        
+        trackContext += 'CONTINUATION REQUIREMENTS:\n';
+        trackContext += '1. DO NOT repeat or re-explain concepts from previous modules\n';
+        trackContext += '2. START by briefly connecting to the last module ("Building on what you learned...")\n';
+        trackContext += '3. ASSUME the learner already knows everything taught above\n';
+        trackContext += '4. REFERENCE previous content specifically (e.g., "Remember when we covered X...")\n';
+        trackContext += '5. ADVANCE to the next logical topics in the learning progression\n';
+        trackContext += '6. USE terminology and concepts established in previous modules\n\n';
       }
     }
 

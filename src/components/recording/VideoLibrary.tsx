@@ -71,7 +71,7 @@ export function VideoLibrary({ onSelect, selectionMode = false }: VideoLibraryPr
     }
   };
 
-  const handleRecordingComplete = async (blob: Blob, mode: 'camera' | 'screen' | 'camera_screen') => {
+  const handleRecordingComplete = async (blob: Blob, mode: 'camera' | 'screen' | 'camera_screen', durationSeconds: number) => {
     try {
       const { createClient } = await import('../../lib/supabase');
       const supabase = createClient();
@@ -89,11 +89,17 @@ export function VideoLibrary({ onSelect, selectionMode = false }: VideoLibraryPr
 
       if (uploadError) throw uploadError;
 
+      // Get the public URL for the uploaded video
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(filename);
+
       const { error: insertError } = await supabase
         .from('recorded_videos')
         .insert({
           title: `تسجيل ${new Date().toLocaleDateString('ar-SA')}`,
-          storage_path: filename,
+          storage_path: urlData.publicUrl,
+          duration_seconds: durationSeconds,
           recording_type: mode,
           user_id: user.id,
           is_public: false,
@@ -110,6 +116,14 @@ export function VideoLibrary({ onSelect, selectionMode = false }: VideoLibraryPr
     }
   };
 
+  // Helper to extract storage path from public URL or return as-is if it's already a path
+  const getStoragePathFromUrl = (urlOrPath: string): string => {
+    if (urlOrPath.includes('/storage/v1/object/public/videos/')) {
+      return urlOrPath.split('/storage/v1/object/public/videos/')[1];
+    }
+    return urlOrPath;
+  };
+
   const deleteVideo = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الفيديو؟')) return;
 
@@ -120,7 +134,8 @@ export function VideoLibrary({ onSelect, selectionMode = false }: VideoLibraryPr
 
       const video = videos.find(v => v.id === id);
       if (video?.storage_path) {
-        await supabase.storage.from('videos').remove([video.storage_path]);
+        const storagePath = getStoragePathFromUrl(video.storage_path);
+        await supabase.storage.from('videos').remove([storagePath]);
       }
 
       const { error } = await supabase
@@ -160,8 +175,11 @@ export function VideoLibrary({ onSelect, selectionMode = false }: VideoLibraryPr
 
       const videosToDelete = videos.filter(v => selectedVideoIds.has(v.id));
       
-      // Delete from storage first
-      const paths = videosToDelete.map(v => v.storage_path).filter(Boolean);
+      // Delete from storage first - extract storage paths from URLs
+      const paths = videosToDelete
+        .map(v => v.storage_path)
+        .filter(Boolean)
+        .map(getStoragePathFromUrl);
       if (paths.length > 0) {
         await supabase.storage.from('videos').remove(paths);
       }
