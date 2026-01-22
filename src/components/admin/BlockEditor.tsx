@@ -18,6 +18,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { useAIEnabled } from '../../hooks/useAIEnabled';
+import { useToast } from '../../hooks';
 import { RichTextEditor } from '../editor';
 import { VideoRecorder } from '../recording';
 import type { Block, Edge, ConditionGroup, QuizQuestion, FormField, MissionStep, ResourceItem } from '../../types/database';
@@ -38,6 +39,11 @@ export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRe
 
   const updateContent = (key: string, value: unknown) => {
     onUpdate({ content: { ...block.content, [key]: value } });
+  };
+
+  // Atomic update for multiple content properties at once (prevents race conditions)
+  const updateContentMultiple = (updates: Record<string, unknown>) => {
+    onUpdate({ content: { ...block.content, ...updates } });
   };
 
   const outgoingEdges = edges.filter((e) => e.from === block.id);
@@ -75,7 +81,7 @@ export function BlockEditor({ block, allBlocks, edges, onUpdate, onAddEdge, onRe
             isOpen={activeSection === 'content'}
             onToggle={() => setActiveSection(activeSection === 'content' ? '' : 'content')}
           >
-            {renderContentEditor(block, updateContent, aiEnabled, aiSettingsLoading)}
+            {renderContentEditor(block, updateContent, updateContentMultiple, aiEnabled, aiSettingsLoading)}
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -212,6 +218,7 @@ function CollapsibleSection({
 function renderContentEditor(
   block: Block,
   updateContent: (key: string, value: unknown) => void,
+  updateContentMultiple: (updates: Record<string, unknown>) => void,
   aiEnabled: boolean,
   aiSettingsLoading: boolean
 ) {
@@ -221,7 +228,7 @@ function renderContentEditor(
     case 'read':
       return <ReadBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'video':
-      return <VideoBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
+      return <VideoBlockEditor content={content} updateContent={updateContent} updateContentMultiple={updateContentMultiple} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'image':
       return <ImageBlockEditor content={content} updateContent={updateContent} aiEnabled={aiEnabled} aiSettingsLoading={aiSettingsLoading} />;
     case 'quiz':
@@ -450,14 +457,17 @@ function ReadBlockEditor({
 function VideoBlockEditor({
   content,
   updateContent,
+  updateContentMultiple,
   aiEnabled,
   aiSettingsLoading,
 }: {
   content: Record<string, unknown>;
   updateContent: (key: string, value: unknown) => void;
+  updateContentMultiple: (updates: Record<string, unknown>) => void;
   aiEnabled: boolean;
   aiSettingsLoading: boolean;
 }) {
+  const { showToast } = useToast();
   const [inputMode, setInputMode] = useState<'url' | 'upload' | 'record'>('url');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -497,14 +507,75 @@ function VideoBlockEditor({
     }
   };
 
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const handleRecordingComplete = async (blob: Blob, mode: string) => {
-    // Create a temporary URL for the recorded video
-    // In production, this would upload to Supabase Storage
-    const url = URL.createObjectURL(blob);
-    updateContent('url', url);
-    updateContent('recordingMode', mode);
-    setShowRecorder(false);
-    setInputMode('url');
+    setIsUploading(true);
+    setUploadError(null);
+    
+    try {
+      const { supabase } = await import('../../lib/supabase');
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('يجب تسجيل الدخول لحفظ الفيديو');
+      }
+
+      // Validate blob has content (prevents uploading empty files)
+      if (blob.size === 0) {
+        throw new Error('التسجيل فارغ. يرجى المحاولة مرة أخرى والتأكد من اختيار نافذة للمشاركة.');
+      }
+
+      console.log('Uploading video blob:', { size: blob.size, type: blob.type });
+
+      // Generate unique filename (user ID must be first folder to satisfy RLS policy)
+      const timestamp = Date.now();
+      const filename = `${user.id}/blocks/${timestamp}.webm`;
+
+      // Upload to Supabase Storage
+      const { error: uploadErr } = await supabase.storage
+        .from('videos')
+        .upload(filename, blob, {
+          contentType: 'video/webm',
+          cacheControl: '3600',
+        });
+
+      if (uploadErr) {
+        console.error('Upload error:', uploadErr);
+        throw new Error('فشل في رفع الفيديو. يرجى المحاولة مرة أخرى.');
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(filename);
+
+      console.log('Video uploaded successfully:', {
+        filename,
+        publicUrl: urlData.publicUrl,
+        recordingMode: mode,
+      });
+
+      // Update block content with permanent URL (single atomic update to prevent race condition)
+      updateContentMultiple({
+        url: urlData.publicUrl,
+        recordingMode: mode,
+      });
+      
+      console.log('Block content updated with:', { url: urlData.publicUrl, recordingMode: mode });
+      
+      setShowRecorder(false);
+      setInputMode('url');
+      showToast('success', 'تم حفظ الفيديو بنجاح');
+    } catch (err) {
+      console.error('Error saving video:', err);
+      const errorMessage = err instanceof Error ? err.message : 'فشل في حفظ الفيديو';
+      setUploadError(errorMessage);
+      throw err; // Re-throw so VideoRecorder can show error state
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Show video recorder modal
@@ -516,12 +587,21 @@ function VideoBlockEditor({
           onClose={() => {
             setShowRecorder(false);
             setInputMode('url');
+            setUploadError(null);
           }}
           showLibrarySave={true}
         />
-        <p className="text-xs text-slate-400 text-center">
-          Note: In production, videos will be uploaded to Taalam storage.
-        </p>
+        {uploadError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
+            {uploadError}
+          </div>
+        )}
+        {isUploading && (
+          <div className="flex items-center justify-center gap-2 text-blue-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>جاري رفع الفيديو...</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -589,6 +669,37 @@ function VideoBlockEditor({
           </button>
         </div>
       ) : null}
+
+      {/* Video Preview */}
+      {content.url && (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-300">معاينة الفيديو</label>
+          <div className="relative aspect-video bg-slate-900 rounded-lg overflow-hidden">
+            <video
+              src={content.url as string}
+              controls
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                console.error('Video load error:', e, 'URL:', content.url);
+              }}
+            />
+          </div>
+          {/* Show the URL for debugging/verification */}
+          <p className="text-xs text-slate-500 truncate" title={content.url as string}>
+            {content.url as string}
+          </p>
+          {content.recordingMode && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span>نوع التسجيل:</span>
+              <span className="px-2 py-0.5 bg-slate-700 rounded">
+                {content.recordingMode === 'camera' ? 'الكاميرا' : 
+                 content.recordingMode === 'screen' ? 'الشاشة' : 
+                 'الشاشة + الكاميرا'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Transcript / Script</label>

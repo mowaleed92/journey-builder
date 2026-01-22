@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Play, Pause, RotateCcw, ChevronRight, Clapperboard } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { AnimationBlockContent } from '../../types/database';
 
 interface AnimationBlockProps {
@@ -9,6 +10,7 @@ interface AnimationBlockProps {
 }
 
 export function AnimationBlock({ content, onComplete, isCompleted }: AnimationBlockProps) {
+  const { t } = useTranslation();
   const [isPlaying, setIsPlaying] = useState(content.autoplay ?? true);
   const [hasWatched, setHasWatched] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -50,7 +52,9 @@ export function AnimationBlock({ content, onComplete, isCompleted }: AnimationBl
               <div className="w-48 h-48 mx-auto mb-4 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-3xl flex items-center justify-center animate-pulse">
                 <Clapperboard className="w-20 h-20 text-white" />
               </div>
-              <p className="text-slate-500 text-sm">Lottie animation: {content.url}</p>
+              <p className="text-slate-500 text-sm">
+                {t('blocks.animation.lottieLabel', { url: content.url })}
+              </p>
             </div>
           </div>
         );
@@ -82,7 +86,7 @@ export function AnimationBlock({ content, onComplete, isCompleted }: AnimationBl
                   <span className="text-2xl font-bold">{Math.round(progress)}%</span>
                 </div>
               </div>
-              <p className="text-slate-300">Interactive animation</p>
+              <p className="text-slate-300">{t('blocks.animation.interactiveLabel')}</p>
             </div>
           </div>
         );
@@ -160,7 +164,7 @@ export function AnimationBlock({ content, onComplete, isCompleted }: AnimationBl
                 : 'bg-slate-700 text-slate-400 cursor-not-allowed'
             }`}
           >
-            {isCompleted ? 'Continue' : 'Mark as Complete'}
+            {isCompleted ? t('blocks.continue') : t('blocks.markComplete')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

@@ -36,6 +36,12 @@ const SAMPLE_COVER_IMAGES = [
   'https://images.pexels.com/photos/4050315/pexels-photo-4050315.jpeg?auto=compress&cs=tinysrgb&w=800',
 ];
 
+// Helper function to detect URLs in text (prevents accidental URL paste in title/description)
+const containsUrl = (text: string): boolean => {
+  const urlPattern = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|net|org|io|dev|jpg|png|jpeg|gif|webp)[^\s]*)/gi;
+  return urlPattern.test(text);
+};
+
 export function TrackManager({ onEditJourney }: TrackManagerProps) {
   const { showToast } = useToast();
   const [tracks, setTracks] = useState<TrackWithModules[]>([]);
@@ -601,6 +607,26 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [titleError, setTitleError] = useState('');
+  const [descriptionError, setDescriptionError] = useState('');
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    if (containsUrl(value)) {
+      setTitleError('Title cannot contain URLs. Please use the cover image field for images.');
+    } else {
+      setTitleError('');
+    }
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    setDescription(value);
+    if (containsUrl(value)) {
+      setDescriptionError('Description cannot contain URLs.');
+    } else {
+      setDescriptionError('');
+    }
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -730,21 +756,35 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="e.g., GenAI Fundamentals"
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${
+                titleError 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-slate-700 focus:ring-blue-500'
+              }`}
             />
+            {titleError && (
+              <p className="mt-1 text-sm text-red-400">{titleError}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
               placeholder="What will learners gain from this track?"
               rows={3}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 resize-none ${
+                descriptionError 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-slate-700 focus:ring-blue-500'
+              }`}
             />
+            {descriptionError && (
+              <p className="mt-1 text-sm text-red-400">{descriptionError}</p>
+            )}
           </div>
 
           <div>
@@ -771,7 +811,7 @@ function CreateTrackModal({ onClose, onCreate, isCreating }: {
           </button>
           <button
             onClick={() => onCreate({ title, description, level, cover_image_url: coverImageUrl || undefined })}
-            disabled={!title.trim() || isCreating}
+            disabled={!title.trim() || !!titleError || !!descriptionError || isCreating}
             className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -854,6 +894,26 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
   const [coverImageUrl, setCoverImageUrl] = useState(track.cover_image_url || '');
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [titleError, setTitleError] = useState('');
+  const [descriptionError, setDescriptionError] = useState('');
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    if (containsUrl(value)) {
+      setTitleError('Title cannot contain URLs. Please use the cover image field for images.');
+    } else {
+      setTitleError('');
+    }
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    setDescription(value);
+    if (containsUrl(value)) {
+      setDescriptionError('Description cannot contain URLs.');
+    } else {
+      setDescriptionError('');
+    }
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -983,19 +1043,33 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-white focus:outline-none focus:ring-2 ${
+                titleError 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-slate-700 focus:ring-blue-500'
+              }`}
             />
+            {titleError && (
+              <p className="mt-1 text-sm text-red-400">{titleError}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-white focus:outline-none focus:ring-2 resize-none ${
+                descriptionError 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-slate-700 focus:ring-blue-500'
+              }`}
             />
+            {descriptionError && (
+              <p className="mt-1 text-sm text-red-400">{descriptionError}</p>
+            )}
           </div>
 
           <div>
@@ -1022,7 +1096,7 @@ function EditTrackModal({ track, onClose, onSave, isSaving }: {
           </button>
           <button
             onClick={() => onSave({ title, description, level, cover_image_url: coverImageUrl || null })}
-            disabled={!title.trim() || isSaving}
+            disabled={!title.trim() || !!titleError || !!descriptionError || isSaving}
             className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}

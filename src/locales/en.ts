@@ -93,6 +93,7 @@ export const en = {
     previous: 'Previous',
     retry: 'Retry',
     complete: 'Complete',
+    completed: 'Completed',
     markComplete: 'Mark as Complete',
     loading: 'Loading...',
     
@@ -103,6 +104,15 @@ export const en = {
     video: {
       loading: 'Loading video...',
       continue: 'Continue',
+      skipVideo: 'Skip Video',
+      slowLoading: 'Video is taking a while to load...',
+      unavailable: 'Video Unavailable',
+      unavailableDesc: 'Unable to load this video. The file may be in an unsupported format or the URL may be incorrect.',
+      continueAnyway: 'Continue Anyway',
+      watchToComplete: 'Watch video to continue',
+      showTranscript: 'Show transcript',
+      hideTranscript: 'Hide transcript',
+      noSupport: 'Your browser does not support the video tag.',
     },
     
     image: {
@@ -119,6 +129,7 @@ export const en = {
       submit: 'Submit',
       next: 'Next',
       retry: 'Retry',
+      topicsToReview: 'Topics to review:',
       
       result: {
         yourScore: 'Your Score',
@@ -223,12 +234,23 @@ export const en = {
     animation: {
       playing: 'Playing...',
       continue: 'Continue',
+      lottieLabel: 'Lottie animation: {url}',
+      interactiveLabel: 'Interactive animation',
     },
     
     code: {
       copy: 'Copy',
       copied: 'Copied!',
       continue: 'Continue',
+    },
+
+    resource: {
+      viewedProgress: '{viewed} / {total} viewed',
+      empty: 'No resources available',
+      download: 'Download',
+      allViewed: 'All resources viewed!',
+      remainingSingle: '1 resource remaining',
+      remainingMultiple: '{count} resources remaining',
     },
     
     exercise: {

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, ChevronRight, Video } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize, ChevronRight, Video, SkipForward, Loader2 } from 'lucide-react';
 import { useTranslation } from '../../contexts';
 import type { VideoBlockContent } from '../../types/database';
 
@@ -17,8 +17,13 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
   const [hasWatchedEnough, setHasWatchedEnough] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [showSkipOption, setShowSkipOption] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const watchTimeRef = useRef<number>(0);
 
   const isYouTube = content.url.includes('youtube.com') || content.url.includes('youtu.be');
   const isVimeo = content.url.includes('vimeo.com');
@@ -48,45 +53,142 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
     return match ? match[1] : null;
   };
 
+  // Handle skip video action
+  const handleSkipVideo = useCallback(() => {
+    setHasWatchedEnough(true);
+  }, []);
+
+  // Set up loading timeout - show skip option if video doesn't load in 10 seconds
   useEffect(() => {
-    if (videoRef.current) {
-      const video = videoRef.current;
-
-      const handleTimeUpdate = () => {
-        const percent = (video.currentTime / video.duration) * 100;
-        setProgress(percent);
-        if (percent >= 80) {
-          setHasWatchedEnough(true);
-        }
-      };
-
-      const handlePlay = () => setIsPlaying(true);
-      const handlePause = () => setIsPlaying(false);
-      const handleEnded = () => {
-        setIsPlaying(false);
-        setHasWatchedEnough(true);
-      };
-
-      const handleError = () => {
-        console.error('Video loading error:', video.error);
-        setVideoError(true);
-      };
-
-      video.addEventListener('timeupdate', handleTimeUpdate);
-      video.addEventListener('play', handlePlay);
-      video.addEventListener('pause', handlePause);
-      video.addEventListener('ended', handleEnded);
-      video.addEventListener('error', handleError);
+    if (!isYouTube && !isVimeo && !videoReady && !videoError) {
+      timeoutRef.current = window.setTimeout(() => {
+        setLoadingTimeout(true);
+        setShowSkipOption(true);
+      }, 10000); // 10 seconds timeout
 
       return () => {
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('play', handlePlay);
-        video.removeEventListener('pause', handlePause);
-        video.removeEventListener('ended', handleEnded);
-        video.removeEventListener('error', handleError);
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
       };
     }
-  }, []);
+  }, [isYouTube, isVimeo, videoReady, videoError]);
+
+  // Main video event listener setup
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLoadedMetadata = () => {
+      console.log('Video metadata loaded, duration:', video.duration);
+      setVideoReady(true);
+      setLoadingTimeout(false);
+      // Clear the loading timeout since video loaded successfully
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+
+    const handleCanPlay = () => {
+      console.log('Video can play');
+      setVideoReady(true);
+      setLoadingTimeout(false);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      // Guard against NaN from division by zero
+      if (!video.duration || !isFinite(video.duration)) return;
+      
+      const percent = (video.currentTime / video.duration) * 100;
+      setProgress(isFinite(percent) ? percent : 0);
+      
+      // Track actual watch time
+      watchTimeRef.current = video.currentTime;
+      
+      // Enable completion at 80% progress
+      if (percent >= 80) {
+        setHasWatchedEnough(true);
+      }
+      
+      // Show skip option after 30 seconds of watching
+      if (video.currentTime >= 30 && !showSkipOption) {
+        setShowSkipOption(true);
+      }
+    };
+
+    const handlePlay = () => {
+      console.log('Video playing');
+      setIsPlaying(true);
+    };
+    
+    const handlePause = () => {
+      console.log('Video paused');
+      setIsPlaying(false);
+    };
+    
+    const handleEnded = () => {
+      console.log('Video ended');
+      setIsPlaying(false);
+      setHasWatchedEnough(true);
+    };
+
+    const handleError = (e: Event) => {
+      const target = e.target as HTMLVideoElement;
+      console.error('Video loading error:', target.error?.message || 'Unknown error');
+      setVideoError(true);
+      setShowSkipOption(true);
+    };
+
+    const handleStalled = () => {
+      console.log('Video stalled');
+      // Show skip option if video stalls
+      setTimeout(() => {
+        if (!videoReady) {
+          setShowSkipOption(true);
+        }
+      }, 5000);
+    };
+
+    const handleWaiting = () => {
+      console.log('Video waiting/buffering');
+    };
+
+    // Attach all event listeners
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handleEnded);
+    video.addEventListener('error', handleError);
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('waiting', handleWaiting);
+
+    // Check if video is already loaded (e.g., from cache)
+    if (video.readyState >= 2) {
+      console.log('Video already loaded from cache');
+      setVideoReady(true);
+      setLoadingTimeout(false);
+    }
+
+    // Try to load the video
+    video.load();
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('error', handleError);
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('waiting', handleWaiting);
+    };
+  }, [content.url, showSkipOption, videoReady]);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -130,9 +232,9 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900">
-      <div className="flex-1 flex flex-col">
-        <div className="relative flex-1 bg-black flex items-center justify-center">
+    <div className="flex flex-col h-full bg-slate-900 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
           {isYouTube ? (
             <iframe
               className="w-full h-full"
@@ -155,25 +257,49 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
                 ref={videoRef}
                 className="w-full h-full object-contain"
                 playsInline
+                preload="metadata"
               >
                 <source src={content.url} type={getVideoMimeType(content.url)} />
-                Your browser does not support the video tag.
+                {t('blocks.video.noSupport')}
               </video>
+              
+              {/* Loading indicator */}
+              {!videoReady && !videoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
+                  <div className="text-center px-6">
+                    <Loader2 className="w-12 h-12 text-primary-400 animate-spin mx-auto mb-4" />
+                    <p className="text-slate-300 text-sm">
+                      {loadingTimeout ? t('blocks.video.slowLoading') : t('blocks.video.loading')}
+                    </p>
+                    {loadingTimeout && (
+                      <button
+                        onClick={handleSkipVideo}
+                        className="mt-4 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 mx-auto"
+                      >
+                        <SkipForward className="w-4 h-4" />
+                        {t('blocks.video.skipVideo')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error state */}
               {videoError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
                   <div className="text-center px-6">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-error/20 flex items-center justify-center">
                       <Video className="w-8 h-8 text-error" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">Video Unavailable</h3>
+                    <h3 className="text-lg font-semibold text-white mb-2">{t('blocks.video.unavailable')}</h3>
                     <p className="text-slate-300 text-sm mb-4">
-                      Unable to load this video. The file may be in an unsupported format or the URL may be incorrect.
+                      {t('blocks.video.unavailableDesc')}
                     </p>
                     <button
-                      onClick={() => setHasWatchedEnough(true)}
+                      onClick={handleSkipVideo}
                       className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                     >
-                      Continue Anyway
+                      {t('blocks.video.continueAnyway')}
                     </button>
                   </div>
                 </div>
@@ -181,7 +307,8 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
             </>
           )}
 
-          {!isYouTube && !isVimeo && !isPlaying && (
+          {/* Play button overlay - only show when video is ready and not playing */}
+          {!isYouTube && !isVimeo && !isPlaying && videoReady && !videoError && (
             <button
               onClick={togglePlay}
               className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
@@ -261,7 +388,7 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
               onClick={() => setShowTranscript(!showTranscript)}
               className="text-sm text-primary-400 hover:text-primary-300 mt-2"
             >
-              {showTranscript ? 'Hide transcript' : 'Show transcript'}
+              {showTranscript ? t('blocks.video.hideTranscript') : t('blocks.video.showTranscript')}
             </button>
           )}
 
@@ -275,6 +402,17 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
         </div>
 
         <div className="px-6 py-4 border-t border-slate-700">
+          {/* Skip video option - shown after 30s of watching or if there's a loading issue */}
+          {showSkipOption && !hasWatchedEnough && !isCompleted && (
+            <button
+              onClick={handleSkipVideo}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-3 rounded-lg font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors text-sm"
+            >
+              <SkipForward className="w-4 h-4" />
+              {t('blocks.video.skipVideo')}
+            </button>
+          )}
+          
           <button
             onClick={onComplete}
             disabled={!hasWatchedEnough && !isCompleted}
@@ -286,7 +424,13 @@ export function VideoBlock({ content, onComplete, isCompleted }: VideoBlockProps
               }
             `}
           >
-            {isCompleted ? t('blocks.continue') : hasWatchedEnough ? t('blocks.markComplete') : t('blocks.video.loading')}
+            {isCompleted 
+              ? t('blocks.continue') 
+              : hasWatchedEnough 
+                ? t('blocks.markComplete') 
+                : videoReady 
+                  ? t('blocks.video.watchToComplete')
+                  : t('blocks.video.loading')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

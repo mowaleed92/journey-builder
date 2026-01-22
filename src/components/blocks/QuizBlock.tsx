@@ -168,7 +168,7 @@ export function QuizBlock({ content, onComplete, previousAttempt }: QuizBlockPro
             {result.weakTopics.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-medium text-slate-700 mb-2">
-                  Topics to review:
+                  {t('blocks.quiz.topicsToReview')}
                 </h3>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {result.weakTopics.map((topic) => (

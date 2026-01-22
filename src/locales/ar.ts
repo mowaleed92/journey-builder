@@ -93,6 +93,7 @@ export const ar = {
     previous: 'السابق',
     retry: 'إعادة المحاولة',
     complete: 'إكمال',
+    completed: 'مكتمل',
     markComplete: 'وضع علامة كمكتمل',
     loading: 'جاري التحميل...',
     
@@ -103,6 +104,15 @@ export const ar = {
     video: {
       loading: 'جاري تحميل الفيديو...',
       continue: 'متابعة',
+      skipVideo: 'تخطي الفيديو',
+      slowLoading: 'الفيديو يستغرق وقتاً طويلاً في التحميل...',
+      unavailable: 'الفيديو غير متاح',
+      unavailableDesc: 'تعذر تحميل هذا الفيديو. قد يكون الملف بتنسيق غير مدعوم أو الرابط غير صحيح.',
+      continueAnyway: 'متابعة على أي حال',
+      watchToComplete: 'شاهد الفيديو للمتابعة',
+      showTranscript: 'إظهار النص',
+      hideTranscript: 'إخفاء النص',
+      noSupport: 'متصفحك لا يدعم تشغيل الفيديو.',
     },
     
     image: {
@@ -119,6 +129,7 @@ export const ar = {
       submit: 'إرسال',
       next: 'التالي',
       retry: 'إعادة المحاولة',
+      topicsToReview: 'مواضيع للمراجعة:',
       
       result: {
         yourScore: 'نتيجتك',
@@ -223,12 +234,23 @@ export const ar = {
     animation: {
       playing: 'جاري التشغيل...',
       continue: 'متابعة',
+      lottieLabel: 'رسوم متحركة Lottie: {url}',
+      interactiveLabel: 'رسوم متحركة تفاعلية',
     },
     
     code: {
       copy: 'نسخ',
       copied: 'تم النسخ!',
       continue: 'متابعة',
+    },
+
+    resource: {
+      viewedProgress: 'تم الاطلاع على {viewed} من {total}',
+      empty: 'لا توجد موارد متاحة',
+      download: 'تنزيل',
+      allViewed: 'تم الاطلاع على جميع الموارد!',
+      remainingSingle: 'مورد واحد متبقٍ',
+      remainingMultiple: 'متبقٍ {count} موارد',
     },
     
     exercise: {

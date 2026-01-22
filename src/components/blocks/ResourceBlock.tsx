@@ -11,6 +11,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import type { ResourceBlockContent, ResourceItem } from '../../types/database';
+import { useTranslation } from '../../contexts';
 
 interface ResourceBlockProps {
   content: ResourceBlockContent;
@@ -33,6 +34,7 @@ const RESOURCE_COLORS: Record<ResourceItem['type'], { bg: string; icon: string; 
 };
 
 export function ResourceBlock({ content, onComplete, previousOutput }: ResourceBlockProps) {
+  const { t } = useTranslation();
   const [viewedResources, setViewedResources] = useState<Set<string>>(
     new Set(previousOutput?.viewedResources || [])
   );
@@ -62,6 +64,7 @@ export function ResourceBlock({ content, onComplete, previousOutput }: ResourceB
   const viewedCount = viewedResources.size;
   const totalCount = content.resources.length;
   const progress = totalCount > 0 ? (viewedCount / totalCount) * 100 : 0;
+  const remainingCount = totalCount - viewedCount;
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -87,7 +90,7 @@ export function ResourceBlock({ content, onComplete, previousOutput }: ResourceB
             />
           </div>
           <span className="text-sm text-slate-500">
-            {viewedCount} / {totalCount} viewed
+            {t('blocks.resource.viewedProgress', { viewed: viewedCount, total: totalCount })}
           </span>
         </div>
       </div>
@@ -97,7 +100,7 @@ export function ResourceBlock({ content, onComplete, previousOutput }: ResourceB
           {content.resources.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <File className="w-12 h-12 text-slate-300 mb-4" />
-              <p className="text-slate-500">No resources available</p>
+              <p className="text-slate-500">{t('blocks.resource.empty')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -135,7 +138,7 @@ export function ResourceBlock({ content, onComplete, previousOutput }: ResourceB
                         </h3>
                         {resource.type === 'download' && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded">
-                            Download
+                          {t('blocks.resource.download')}
                           </span>
                         )}
                       </div>
@@ -167,14 +170,16 @@ export function ResourceBlock({ content, onComplete, previousOutput }: ResourceB
         <div className="flex items-center justify-between max-w-3xl mx-auto">
           <div className="text-sm text-slate-500">
             {viewedCount === totalCount
-              ? 'All resources viewed!'
-              : `${totalCount - viewedCount} resource${totalCount - viewedCount !== 1 ? 's' : ''} remaining`}
+              ? t('blocks.resource.allViewed')
+              : remainingCount === 1
+              ? t('blocks.resource.remainingSingle')
+              : t('blocks.resource.remainingMultiple', { count: remainingCount })}
           </div>
           <button
             onClick={handleComplete}
             className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
           >
-            Continue
+            {t('blocks.continue')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

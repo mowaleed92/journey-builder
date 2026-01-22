@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Code, Copy, Check, ChevronRight } from 'lucide-react';
+import { useTranslation } from '../../contexts';
 import type { CodeBlockContent } from '../../types/database';
 
 interface CodeBlockProps {
@@ -32,6 +33,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 export function CodeBlock({ content, onComplete, isCompleted }: CodeBlockProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const showLineNumbers = content.showLineNumbers ?? true;
 
@@ -90,12 +92,12 @@ export function CodeBlock({ content, onComplete, isCompleted }: CodeBlockProps) 
                 {copied ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-green-400" />
-                    <span className="text-green-400">Copied!</span>
+                    <span className="text-green-400">{t('blocks.code.copied')}</span>
                   </>
                 ) : (
                   <>
                     <Copy className="w-3.5 h-3.5" />
-                    <span>Copy</span>
+                    <span>{t('blocks.code.copy')}</span>
                   </>
                 )}
               </button>
@@ -149,7 +151,7 @@ export function CodeBlock({ content, onComplete, isCompleted }: CodeBlockProps) 
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {isCompleted ? 'Completed' : 'Continue'}
+            {isCompleted ? t('blocks.completed') : t('blocks.continue')}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
