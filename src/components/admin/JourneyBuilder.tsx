@@ -900,7 +900,7 @@ function JourneyBuilderInner({ moduleId, journeyVersionId, onBack }: JourneyBuil
             zoomOnScroll={true}
           >
             <Background color="#334155" gap={20} size={1} />
-            <Controls className="bg-slate-800 border border-slate-700 rounded-lg" />
+            <Controls />
             <MiniMap
               nodeColor={(node) => {
                 const block = graph.blocks.find(b => b.id === node.id);

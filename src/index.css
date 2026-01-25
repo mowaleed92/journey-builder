@@ -241,21 +241,31 @@
 }
 
 .react-flow__controls {
-  background-color: #1e293b;
-  border: 1px solid #334155;
+  background-color: #0f172a !important; /* slate-900 - much darker */
+  border: 1px solid #475569 !important;
   border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
 }
 
 .react-flow__controls-button {
-  background-color: #1e293b;
-  border-bottom: 1px solid #334155;
-  fill: #94a3b8;
+  background-color: #0f172a !important; /* slate-900 - match controls background */
+  border-bottom: 1px solid #475569 !important;
+  fill: #e2e8f0 !important; /* slate-200 - bright and visible */
+  color: #e2e8f0 !important;
 }
 
 .react-flow__controls-button:hover {
-  background-color: #334155;
-  fill: #f8fafc;
+  background-color: #1e293b !important; /* slate-800 - lighter on hover */
+  fill: #ffffff !important; /* pure white for maximum contrast on hover */
+  color: #ffffff !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+.react-flow__controls-button path {
+  fill: currentColor !important;
 }
 
 .react-flow__controls-button:first-child {

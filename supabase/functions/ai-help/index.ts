@@ -25,6 +25,12 @@ interface RequestBody {
   wrongQuestions?: WrongQuestion[];
   model?: string;
   language?: string;
+  // New context fields
+  customSystemPrompt?: string;
+  learningObjectives?: string;
+  courseMaterialContext?: string;
+  subjectDomain?: string;
+  globalSystemPrompt?: string;
 }
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -63,18 +69,62 @@ Deno.serve(async (req: Request) => {
     }
 
     const body: RequestBody = await req.json();
-    const { messages, mode, weakTopics, wrongQuestions, model = 'gpt-4o-mini', language = 'en' } = body;
+    const { 
+      messages, 
+      mode, 
+      weakTopics, 
+      wrongQuestions, 
+      model = 'gpt-4o-mini', 
+      language = 'en',
+      customSystemPrompt,
+      learningObjectives,
+      courseMaterialContext,
+      subjectDomain,
+      globalSystemPrompt
+    } = body;
 
-    // Arabic language instruction to prepend to system prompts
-    const arabicInstruction = language === 'ar' 
-      ? `IMPORTANT: You MUST respond in Arabic (العربية). All your responses should be written in Arabic language.\n\n`
-      : '';
+    // Build language instruction based on language code
+    const languageInstructions: Record<string, string> = {
+      'ar': 'IMPORTANT: You MUST respond in Arabic (العربية). All your responses should be written in Arabic language.',
+      'en': 'Respond in English.',
+      'es': 'IMPORTANTE: Debes responder en español. Todas tus respuestas deben estar escritas en español.',
+      'fr': 'IMPORTANT: Vous devez répondre en français. Toutes vos réponses doivent être écrites en français.',
+      'de': 'WICHTIG: Du musst auf Deutsch antworten. Alle deine Antworten sollten auf Deutsch geschrieben sein.',
+      'zh': '重要：你必须用中文回答。你的所有回复都应该用中文书写。'
+    };
+    
+    const languageInstruction = languageInstructions[language] || languageInstructions['en'];
 
-    let systemPrompt = '';
+    // Build context sections
+    const contextSections: string[] = [];
+    
+    if (subjectDomain) {
+      contextSections.push(`Subject Domain: ${subjectDomain}`);
+    }
+    
+    if (learningObjectives) {
+      contextSections.push(`Learning Objectives:\n${learningObjectives}`);
+    }
+    
+    if (courseMaterialContext) {
+      contextSections.push(`Course Material Context:\n${courseMaterialContext}`);
+    }
 
+    // Build the base system prompt - use custom if provided, otherwise use global or default
+    let basePrompt = '';
+    if (customSystemPrompt) {
+      basePrompt = customSystemPrompt;
+    } else if (globalSystemPrompt) {
+      basePrompt = globalSystemPrompt;
+    } else {
+      basePrompt = 'You are a helpful, patient, and encouraging learning assistant. Your goal is to help students understand concepts clearly and build their confidence. Always be supportive while maintaining educational rigor.';
+    }
+
+    // Build mode-specific instructions
+    let modeInstructions = '';
     switch (mode) {
       case 'targeted_remediation':
-        systemPrompt = `${arabicInstruction}You are a helpful learning assistant specializing in personalized education. The student has just completed a quiz and struggled with certain concepts.
+        modeInstructions = `The student has just completed a quiz and struggled with certain concepts.
 
 ${weakTopics?.length ? `Topics they need help with: ${weakTopics.join(', ')}` : ''}
 
@@ -92,7 +142,7 @@ Do not overwhelm them with information. Address one concept at a time.`;
         break;
 
       case 'guided_explanation':
-        systemPrompt = `${arabicInstruction}You are a patient and clear learning assistant. Your role is to:
+        modeInstructions = `Your role is to:
 1. Break down complex concepts into simple, digestible parts
 2. Use analogies and real-world examples
 3. Guide the learner through understanding step by step
@@ -104,7 +154,7 @@ Keep responses focused and avoid information overload.`;
 
       case 'open_chat':
       default:
-        systemPrompt = `${arabicInstruction}You are a friendly and knowledgeable learning assistant. You help students understand course material by:
+        modeInstructions = `You help students understand course material by:
 1. Answering questions clearly and concisely
 2. Providing relevant examples
 3. Suggesting related topics to explore
@@ -113,6 +163,19 @@ Keep responses focused and avoid information overload.`;
 Be supportive but maintain educational rigor. Keep responses focused.`;
         break;
     }
+
+    // Combine all parts into the final system prompt
+    const systemPromptParts = [
+      languageInstruction,
+      '',
+      basePrompt,
+      '',
+      ...(contextSections.length > 0 ? ['--- CONTEXT ---', ...contextSections, ''] : []),
+      '--- INSTRUCTIONS ---',
+      modeInstructions
+    ];
+    
+    const systemPrompt = systemPromptParts.filter(Boolean).join('\n');
 
     const openaiMessages: Message[] = [
       { role: 'system', content: systemPrompt },

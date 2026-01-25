@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, User, Loader2, ChevronRight, Sparkles, AlertTriangle } from 'lucide-react';
 import { useAIEnabled } from '../../hooks/useAIEnabled';
 import { useTranslation } from '../../contexts';
+import { supabase } from '../../lib/supabase';
 import type { AIHelpBlockContent } from '../../types/database';
 
 interface AIHelpBlockProps {
@@ -16,6 +17,12 @@ interface Message {
   content: string;
 }
 
+interface GlobalAISettings {
+  systemPrompt: string;
+  language: string;
+  subjectDomain: string;
+}
+
 export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }: AIHelpBlockProps) {
   const { t } = useTranslation();
   const { enabled: aiEnabled, helpModel, isLoading: aiSettingsLoading } = useAIEnabled();
@@ -24,6 +31,11 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
   const [isLoading, setIsLoading] = useState(false);
   const [hasCompletedMinTurns, setHasCompletedMinTurns] = useState(false);
   const [aiModel, setAiModel] = useState('gpt-4o-mini');
+  const [globalSettings, setGlobalSettings] = useState<GlobalAISettings>({
+    systemPrompt: '',
+    language: 'ar',
+    subjectDomain: ''
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -54,6 +66,51 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
       setAiModel(helpModel);
     }
   }, [aiSettingsLoading, helpModel]);
+
+  // Load global AI context settings
+  useEffect(() => {
+    const loadGlobalSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('setting_key, setting_value')
+          .in('setting_key', ['ai_default_system_prompt', 'ai_default_language', 'ai_default_subject_domain']);
+
+        if (error) {
+          console.error('Error loading global AI settings:', error);
+          return;
+        }
+
+        if (data) {
+          const settings: GlobalAISettings = {
+            systemPrompt: '',
+            language: 'ar',
+            subjectDomain: ''
+          };
+
+          data.forEach(setting => {
+            switch (setting.setting_key) {
+              case 'ai_default_system_prompt':
+                settings.systemPrompt = setting.setting_value;
+                break;
+              case 'ai_default_language':
+                settings.language = setting.setting_value;
+                break;
+              case 'ai_default_subject_domain':
+                settings.subjectDomain = setting.setting_value;
+                break;
+            }
+          });
+
+          setGlobalSettings(settings);
+        }
+      } catch (error) {
+        console.error('Error loading global AI settings:', error);
+      }
+    };
+
+    loadGlobalSettings();
+  }, []);
 
   const generateInitialMessage = async () => {
     setIsLoading(true);
@@ -101,6 +158,12 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
     setInput('');
     setIsLoading(true);
 
+    // Determine the effective language: block setting > global setting > default 'ar'
+    const effectiveLanguage = content.language || globalSettings.language || 'ar';
+    
+    // Determine the effective subject domain: block setting > global setting
+    const effectiveSubjectDomain = content.subjectDomain || globalSettings.subjectDomain || '';
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-help`,
@@ -116,7 +179,14 @@ export function AIHelpBlock({ content, weakTopics, wrongQuestions, onComplete }:
             weakTopics,
             wrongQuestions,
             model: aiModel,
-            language: 'ar', // Request Arabic responses from AI
+            language: effectiveLanguage,
+            // Pass block-level context
+            customSystemPrompt: content.customSystemPrompt || undefined,
+            learningObjectives: content.learningObjectives || undefined,
+            courseMaterialContext: content.courseMaterialContext || undefined,
+            subjectDomain: effectiveSubjectDomain || undefined,
+            // Pass global system prompt as fallback
+            globalSystemPrompt: globalSettings.systemPrompt || undefined,
           }),
         }
       );

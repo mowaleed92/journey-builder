@@ -279,6 +279,12 @@ export interface AIHelpBlockContent {
   mode: 'targeted_remediation' | 'open_chat' | 'guided_explanation';
   contextFromBlocks?: string[];
   maxTurns?: number;
+  // AI Context fields
+  customSystemPrompt?: string;
+  learningObjectives?: string;
+  courseMaterialContext?: string;
+  subjectDomain?: string;
+  language?: string;
 }
 
 export interface CheckpointBlockContent {

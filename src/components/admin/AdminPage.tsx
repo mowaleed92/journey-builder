@@ -296,6 +296,11 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
   const [imageModel, setImageModel] = useState('gpt-image-1.5');
   const [aiEnabled, setAiEnabled] = useState(true);
   
+  // AI Context settings state
+  const [aiDefaultSystemPrompt, setAiDefaultSystemPrompt] = useState('You are a helpful, patient, and encouraging learning assistant. Your goal is to help students understand concepts clearly and build their confidence. Always be supportive while maintaining educational rigor.');
+  const [aiDefaultLanguage, setAiDefaultLanguage] = useState('ar');
+  const [aiDefaultSubjectDomain, setAiDefaultSubjectDomain] = useState('');
+  
   // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -318,7 +323,10 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
           'ai_image_model',
           'platform_name', 
           'default_language',
-          'ai_enabled'
+          'ai_enabled',
+          'ai_default_system_prompt',
+          'ai_default_language',
+          'ai_default_subject_domain'
         ]);
 
       if (error) throw error;
@@ -344,6 +352,15 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
             case 'ai_enabled':
               setAiEnabled(setting.setting_value === 'true');
               break;
+            case 'ai_default_system_prompt':
+              setAiDefaultSystemPrompt(setting.setting_value);
+              break;
+            case 'ai_default_language':
+              setAiDefaultLanguage(setting.setting_value);
+              break;
+            case 'ai_default_subject_domain':
+              setAiDefaultSubjectDomain(setting.setting_value);
+              break;
           }
         });
       }
@@ -368,7 +385,10 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
         { setting_key: 'ai_image_model', setting_value: imageModel },
         { setting_key: 'platform_name', setting_value: platformName },
         { setting_key: 'default_language', setting_value: language },
-        { setting_key: 'ai_enabled', setting_value: String(aiEnabled) }
+        { setting_key: 'ai_enabled', setting_value: String(aiEnabled) },
+        { setting_key: 'ai_default_system_prompt', setting_value: aiDefaultSystemPrompt },
+        { setting_key: 'ai_default_language', setting_value: aiDefaultLanguage },
+        { setting_key: 'ai_default_subject_domain', setting_value: aiDefaultSubjectDomain }
       ];
 
       // Use upsert to handle both insert and update
@@ -413,7 +433,10 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
       'ai_image_model': 'AI model used for generating educational images and diagrams',
       'platform_name': 'Platform display name',
       'default_language': 'Default content language',
-      'ai_enabled': 'Whether AI content generation is enabled'
+      'ai_enabled': 'Whether AI content generation is enabled',
+      'ai_default_system_prompt': 'Default system prompt/persona for AI interactions',
+      'ai_default_language': 'Default language for AI responses',
+      'ai_default_subject_domain': 'Default subject domain/topic area for AI context'
     };
     return descriptions[key] || '';
   };
@@ -529,6 +552,57 @@ function AdminSettings({ onSettingsChanged }: AdminSettingsProps) {
                 />
                 <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+          <h2 className="text-lg font-semibold text-white mb-2">AI Context Settings</h2>
+          <p className="text-xs text-slate-500 mb-4">Configure default context and behavior for AI Help blocks. These can be overridden at the block level.</p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Default System Prompt
+              </label>
+              <div className="text-xs text-slate-500 mb-2">The AI persona and instructions for all AI Help interactions</div>
+              <textarea
+                value={aiDefaultSystemPrompt}
+                onChange={(e) => setAiDefaultSystemPrompt(e.target.value)}
+                rows={4}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="Enter default system prompt for AI interactions..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Default AI Response Language
+              </label>
+              <div className="text-xs text-slate-500 mb-2">Language the AI should use when responding to learners</div>
+              <select
+                value={aiDefaultLanguage}
+                onChange={(e) => setAiDefaultLanguage(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ar">Arabic (العربية)</option>
+                <option value="en">English</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="fr">French (Français)</option>
+                <option value="de">German (Deutsch)</option>
+                <option value="zh">Chinese (中文)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Default Subject Domain
+              </label>
+              <div className="text-xs text-slate-500 mb-2">The default subject area or topic for AI context (e.g., "Machine Learning", "Mathematics")</div>
+              <input
+                type="text"
+                value={aiDefaultSubjectDomain}
+                onChange={(e) => setAiDefaultSubjectDomain(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter default subject domain..."
+              />
             </div>
           </div>
         </div>

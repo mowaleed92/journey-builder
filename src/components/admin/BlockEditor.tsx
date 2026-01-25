@@ -1413,6 +1413,17 @@ function AIHelpBlockEditor({
   return (
     <div className="space-y-4">
       <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Title</label>
+        <input
+          type="text"
+          value={(content.title as string) || ''}
+          onChange={(e) => updateContent('title', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="AI Learning Assistant"
+        />
+      </div>
+
+      <div>
         <label className="block text-sm font-medium text-slate-300 mb-1">Mode</label>
         <select
           value={(content.mode as string) || 'targeted_remediation'}
@@ -1442,6 +1453,72 @@ function AIHelpBlockEditor({
           max={20}
           className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Language</label>
+        <select
+          value={(content.language as string) || ''}
+          onChange={(e) => updateContent('language', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Use Global Default</option>
+          <option value="ar">Arabic (العربية)</option>
+          <option value="en">English</option>
+          <option value="es">Spanish (Español)</option>
+          <option value="fr">French (Français)</option>
+          <option value="de">German (Deutsch)</option>
+          <option value="zh">Chinese (中文)</option>
+        </select>
+        <p className="text-xs text-slate-500 mt-1">Language for AI responses. Leave empty to use global setting.</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Subject Domain</label>
+        <input
+          type="text"
+          value={(content.subjectDomain as string) || ''}
+          onChange={(e) => updateContent('subjectDomain', e.target.value)}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="e.g., Machine Learning, Mathematics"
+        />
+        <p className="text-xs text-slate-500 mt-1">The subject area for this AI Help block.</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Learning Objectives</label>
+        <textarea
+          value={(content.learningObjectives as string) || ''}
+          onChange={(e) => updateContent('learningObjectives', e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="What should learners understand after this AI interaction?"
+        />
+        <p className="text-xs text-slate-500 mt-1">Specific learning objectives the AI should focus on.</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Course Material Context</label>
+        <textarea
+          value={(content.courseMaterialContext as string) || ''}
+          onChange={(e) => updateContent('courseMaterialContext', e.target.value)}
+          rows={4}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="Provide relevant course material, key concepts, or summary..."
+        />
+        <p className="text-xs text-slate-500 mt-1">Context about the course material the AI should reference.</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">Custom System Prompt</label>
+        <textarea
+          value={(content.customSystemPrompt as string) || ''}
+          onChange={(e) => updateContent('customSystemPrompt', e.target.value)}
+          rows={4}
+          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          placeholder="Custom instructions for the AI (overrides global default)..."
+        />
+        <p className="text-xs text-slate-500 mt-1">Optional: Override the global system prompt with custom instructions for this block.</p>
       </div>
     </div>
   );
