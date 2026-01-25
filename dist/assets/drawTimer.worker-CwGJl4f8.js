@@ -1,0 +1,1 @@
+(function(){"use strict";let e=null;self.onmessage=s=>{if(s.data.type==="start"){const t=s.data.fps||30,l=Math.floor(1e3/t);e!==null&&self.clearInterval(e),e=self.setInterval(()=>{self.postMessage({type:"draw"})},l),self.postMessage({type:"started",fps:t,interval:l})}else s.data.type==="stop"&&(e!==null&&(self.clearInterval(e),e=null),self.postMessage({type:"stopped"}))}})();
